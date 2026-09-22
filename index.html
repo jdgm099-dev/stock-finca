@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Libreta de Stock</title>
+<meta name="description" content="Control de víveres e insumos de la finca, funciona sin conexión a internet." />
+<meta name="theme-color" content="#5B6B3F" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="app-header">
+    <h1>Libreta de Stock</h1>
+    <button id="btn-backup" class="icon-btn" title="Copia de seguridad" aria-label="Copia de seguridad">⇅</button>
+  </header>
+
+  <!-- ===================== CONTENIDO ===================== -->
+  <main id="view-inicio" class="view">
+    <section id="alertas-box" class="ledger-box" hidden>
+      <h2 class="ledger-heading alert-heading">Para revisar</h2>
+      <ul id="alertas-list" class="alert-list"></ul>
+    </section>
+
+    <section class="ledger-box">
+      <h2 class="ledger-heading">Resumen</h2>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-num" id="stat-productos">0</span>
+          <span class="stat-label">productos</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stat-bajos">0</span>
+          <span class="stat-label">stock bajo</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stat-vencer">0</span>
+          <span class="stat-label">por vencer</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="ledger-box">
+      <h2 class="ledger-heading">Últimos movimientos</h2>
+      <ul id="ultimos-movs" class="mov-list"></ul>
+      <p id="ultimos-movs-empty" class="empty-msg" hidden>Todavía no registraste ningún movimiento.</p>
+    </section>
+  </main>
+
+  <main id="view-inventario" class="view" hidden>
+    <div class="cat-filter" id="cat-filter" role="tablist" aria-label="Filtrar por categoría"></div>
+    <div id="inventario-list"></div>
+    <p id="inventario-empty" class="empty-msg" hidden>No hay productos cargados todavía. Tocá "Agregar producto" para empezar.</p>
+  </main>
+
+  <main id="view-movimientos" class="view" hidden>
+    <ul id="movimientos-list" class="mov-list full"></ul>
+    <p id="movimientos-empty" class="empty-msg" hidden>Todavía no hay movimientos registrados.</p>
+  </main>
+
+  <!-- ===================== FAB ===================== -->
+  <button id="btn-agregar" class="fab">+ Agregar producto</button>
+
+  <!-- ===================== TABS LATERALES ===================== -->
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab active" data-view="inicio">
+      <span class="tab-mark">Inicio</span>
+    </button>
+    <button class="tab" data-view="inventario">
+      <span class="tab-mark">Inventario</span>
+    </button>
+    <button class="tab" data-view="movimientos">
+      <span class="tab-mark">Movimientos</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ===================== MODAL: agregar/editar producto ===================== -->
+<div id="modal-producto" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-producto-titulo">
+    <h2 id="modal-producto-titulo">Agregar producto</h2>
+    <form id="form-producto">
+      <label>
+        Nombre
+        <input type="text" id="f-nombre" required maxlength="60" placeholder="Ej: Arroz" />
+      </label>
+
+      <label>
+        Categoría
+        <select id="f-categoria">
+          <option value="Alimentos">Alimentos</option>
+          <option value="Limpieza">Limpieza</option>
+          <option value="Insumos">Insumos</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </label>
+
+      <div class="field-row">
+        <label>
+          Cantidad
+          <input type="number" id="f-cantidad" required min="0" step="any" inputmode="decimal" />
+        </label>
+        <label>
+          Unidad
+          <select id="f-unidad">
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="L">L</option>
+            <option value="ml">ml</option>
+            <option value="unidades">unidades</option>
+            <option value="paquetes">paquetes</option>
+          </select>
+        </label>
+      </div>
+
+      <label>
+        Avisar cuando quede menos de
+        <input type="number" id="f-minimo" min="0" step="any" inputmode="decimal" placeholder="Opcional" />
+      </label>
+
+      <label>
+        Fecha de vencimiento
+        <input type="date" id="f-vencimiento" />
+      </label>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-eliminar-producto" class="btn btn-danger" hidden>Eliminar</button>
+        <button type="button" id="btn-cancelar-producto" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: registrar movimiento ===================== -->
+<div id="modal-mov" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-mov-titulo">
+    <h2 id="modal-mov-titulo">Movimiento</h2>
+    <p id="modal-mov-producto" class="modal-subtitle"></p>
+    <form id="form-mov">
+      <label>
+        Cantidad
+        <input type="number" id="mv-cantidad" required min="0" step="any" inputmode="decimal" />
+      </label>
+      <label>
+        Nota (opcional)
+        <input type="text" id="mv-nota" maxlength="80" placeholder="Ej: compra en el pueblo" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancelar-mov" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-confirmar-mov">Confirmar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: backup ===================== -->
+<div id="modal-backup" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-backup-titulo">
+    <h2 id="modal-backup-titulo">Copia de seguridad</h2>
+    <p class="modal-subtitle">Los datos se guardan solo en este celular. Hacé una copia de vez en cuando por si cambiás de equipo.</p>
+    <div class="modal-actions column">
+      <button type="button" id="btn-exportar" class="btn btn-primary">Descargar copia (.json)</button>
+      <label class="btn btn-ghost file-btn">
+        Restaurar copia
+        <input type="file" id="input-importar" accept="application/json" hidden />
+      </label>
+      <button type="button" id="btn-cerrar-backup" class="btn btn-ghost">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
