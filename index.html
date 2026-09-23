@@ -168,28 +168,38 @@
 <div id="modal-backup" class="modal-overlay" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-backup-titulo">
     <h2 id="modal-backup-titulo">Copia de seguridad</h2>
-    <p class="modal-subtitle">Los datos se guardan solo en este celular. Hacé una copia de vez en cuando por si cambiás de equipo.</p>
+    <p class="modal-subtitle">Los datos se sincronizan solos entre dispositivos con el mismo código de finca cuando hay internet. Igual te recomendamos hacer una copia de vez en cuando.</p>
     <div class="modal-actions column">
       <button type="button" id="btn-exportar" class="btn btn-primary">Descargar copia (.json)</button>
       <label class="btn btn-ghost file-btn">
         Restaurar copia
         <input type="file" id="input-importar" accept="application/json" hidden />
       </label>
+      <button type="button" id="btn-cambiar-perfil" class="btn btn-ghost">Cambiar de finca / perfil</button>
       <button type="button" id="btn-cerrar-backup" class="btn btn-ghost">Cerrar</button>
     </div>
   </div>
 </div>
 
-
-
-
-
-
-
-  
+<!-- ===================== MODAL: elegir perfil (finca) ===================== -->
+<div id="modal-perfil" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-perfil-titulo">
+    <h2 id="modal-perfil-titulo">¿De qué finca es este inventario?</h2>
+    <p class="modal-subtitle">Escribí un código corto para tu finca (por ejemplo tu nombre o el nombre de la finca). Usá el mismo código en todos los dispositivos que quieras sincronizar entre sí.</p>
+    <form id="form-perfil">
+      <label>
+        Código de finca
+        <input type="text" id="f-perfil" required maxlength="40" placeholder="Ej: finca-maria" autocomplete="off" />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">Empezar</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <div id="toast" class="toast" hidden></div>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
