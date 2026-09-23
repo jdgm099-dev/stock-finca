@@ -163,6 +163,53 @@ function estaPorVencer(producto) {
   return dias <= DIAS_ALERTA_VENCIMIENTO;
 }
 
+/* ---------------------------------------------------------------------
+   PREDICCIÓN DE AGOTAMIENTO POR CONSUMO REAL
+   -----------------------------------------------------------------------
+   En vez de avisar solo cuando se cruza un mínimo fijo (que hay que cargar
+   a mano y no siempre se actualiza), esto mira las salidas registradas de
+   cada producto en los últimos VENTANA_DIAS días, calcula un consumo
+   promedio por día, y estima cuántos días de stock quedan al ritmo actual.
+   Esto se acerca a la idea de "punto de reorden" de gestión de inventarios:
+   en vez de un umbral fijo, se basa en la velocidad real de consumo.
+   ------------------------------------------------------------------- */
+
+const VENTANA_CONSUMO_DIAS = 30;
+const DIAS_ALERTA_AGOTAMIENTO = 5; // avisar si el stock se agota en 5 días o menos
+
+function consumoDiarioPromedio(productId) {
+  const ahora = new Date();
+  const limite = new Date(ahora);
+  limite.setDate(limite.getDate() - VENTANA_CONSUMO_DIAS);
+
+  const salidas = state.movements.filter(
+    (m) => m.productId === productId && m.type === "salida" && new Date(m.date) >= limite
+  );
+  if (salidas.length === 0) return null;
+
+  const total = salidas.reduce((acc, m) => acc + m.quantity, 0);
+  const fechaMasAntigua = salidas.reduce(
+    (min, m) => (new Date(m.date) < min ? new Date(m.date) : min),
+    new Date(salidas[0].date)
+  );
+  // Días realmente transcurridos desde la primera salida registrada en la
+  // ventana (mínimo 1, para no dividir por 0 si todo pasó el mismo día).
+  const diasTranscurridos = Math.max(1, (ahora - fechaMasAntigua) / (1000 * 60 * 60 * 24));
+
+  return total / diasTranscurridos;
+}
+
+function diasHastaAgotamiento(producto) {
+  const consumo = consumoDiarioPromedio(producto.id);
+  if (!consumo || consumo <= 0) return null;
+  return producto.quantity / consumo;
+}
+
+function estaPorAgotarse(producto) {
+  const dias = diasHastaAgotamiento(producto);
+  return dias !== null && dias <= DIAS_ALERTA_AGOTAMIENTO;
+}
+
 function mostrarToast(mensaje) {
   const toast = document.getElementById("toast");
   toast.textContent = mensaje;
@@ -198,6 +245,9 @@ document.querySelectorAll(".tabs .tab").forEach((btn) => {
 function renderizarInicio() {
   const bajos = state.products.filter(estaStockBajo);
   const porVencer = state.products.filter(estaPorVencer);
+  // Solo se muestra la alerta de "se va a agotar" si el producto no tiene
+  // ya la alerta de stock bajo (para no repetir el mismo aviso dos veces).
+  const porAgotarse = state.products.filter((p) => estaPorAgotarse(p) && !estaStockBajo(p));
 
   const alertasBox = document.getElementById("alertas-box");
   const alertasList = document.getElementById("alertas-list");
@@ -205,6 +255,11 @@ function renderizarInicio() {
 
   const alertas = [
     ...bajos.map((p) => ({ p, texto: `Quedan ${p.quantity} ${p.unit}` })),
+    ...porAgotarse.map((p) => {
+      const dias = Math.round(diasHastaAgotamiento(p));
+      const texto = dias <= 0 ? "Se estaría agotando hoy" : `Se agotaría en ~${dias} día(s) al ritmo actual`;
+      return { p, texto };
+    }),
     ...porVencer.map((p) => {
       const dias = diasHasta(p.expirationDate);
       const texto = dias < 0 ? "Ya venció" : dias === 0 ? "Vence hoy" : `Vence en ${dias} día(s)`;
@@ -283,7 +338,8 @@ function renderizarInventario() {
 
 function crearFilaProducto(p) {
   const row = document.createElement("div");
-  row.className = "item-row" + (estaStockBajo(p) ? " low" : "");
+  const alertaAgotamiento = estaPorAgotarse(p) && !estaStockBajo(p);
+  row.className = "item-row" + (estaStockBajo(p) || alertaAgotamiento ? " low" : "");
 
   const info = document.createElement("div");
   info.className = "item-info";
@@ -294,6 +350,12 @@ function crearFilaProducto(p) {
     const dias = diasHasta(p.expirationDate);
     metaHTML += ` · vence ${formatearFecha(p.expirationDate)}`;
     if (dias <= DIAS_ALERTA_VENCIMIENTO) metaClass += " warn";
+  }
+  const consumo = consumoDiarioPromedio(p.id);
+  if (consumo) {
+    const diasRestantes = Math.round(p.quantity / consumo);
+    metaHTML += ` · consumís ~${redondearConsumo(consumo)} ${escapeHTML(p.unit)}/día (quedan ~${diasRestantes} día${diasRestantes === 1 ? "" : "s"})`;
+    if (alertaAgotamiento) metaClass += " warn";
   }
   info.innerHTML = `<span class="item-name">${escapeHTML(p.name)}</span><span class="${metaClass}">${metaHTML}</span>`;
   info.addEventListener("click", () => abrirModalProducto(p.id));
@@ -503,6 +565,11 @@ formMov.addEventListener("submit", (e) => {
 
 function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+function redondearConsumo(n) {
+  // Muestra hasta 2 decimales, sin ceros de más (ej: 1.5, no 1.50)
+  return round2(n).toString();
 }
 
 /* =====================================================================
