@@ -6,12 +6,13 @@
  * para que funcionen offline después del primer uso online.
  */
 
-const CACHE_NAME = "libreta-stock-v1";
+const CACHE_NAME = "libreta-stock-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./firebase-config.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
