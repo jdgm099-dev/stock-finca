@@ -2,63 +2,131 @@
  * Libreta de Stock
  * -----------------
  * App de control de víveres/insumos para una finca, pensada para funcionar
- * sin conexión a internet y guardar todo en el propio celular.
+ * sin conexión a internet y sincronizarse sola entre dispositivos que
+ * compartan el mismo "código de finca" cuando hay internet disponible.
  *
- * No usa ningún framework a propósito: es JavaScript "vanilla" (puro) para
- * que sea fácil de leer, explicar y mantener sin depender de librerías
- * externas. Toda la app vive en 3 archivos: index.html, style.css y app.js.
+ * No usa ningún framework de interfaz a propósito: es JavaScript "vanilla"
+ * (puro), salvo por el SDK de Firebase que se importa como módulo. Esto
+ * mantiene la app fácil de leer y explicar.
  *
- * PERSISTENCIA DE DATOS
- * ----------------------
- * Los datos se guardan en localStorage, que es una base de datos simple
- * que el navegador guarda en el propio dispositivo (no en internet).
- * Por eso la app funciona sin conexión y los datos son privados de ese
- * celular. La contrapartida (importante para la tesis, sección de
- * limitaciones): si se cambia de celular o se borra el navegador, se
- * pierden los datos si no se hizo una copia de seguridad antes. Por eso
- * existe la función de exportar/importar copia de seguridad (.json).
+ * PERSISTENCIA Y SINCRONIZACIÓN DE DATOS
+ * ----------------------------------------
+ * Los datos viven en Cloud Firestore (una base de datos de Google, con
+ * plan gratuito). El propio SDK de Firestore guarda una copia local en el
+ * dispositivo (por eso la app sigue funcionando sin internet: se puede
+ * seguir registrando movimientos offline) y, apenas hay conexión, sincroniza
+ * automáticamente esos cambios con el resto de los dispositivos que usen el
+ * mismo "código de finca" (profileId).
+ *
+ * Cada finca es un documento en la colección "profiles". Dentro de cada
+ * finca hay dos sub-colecciones: "products" y "movements". Esto separa
+ * completamente los datos de fincas distintas: dos personas probando con
+ * códigos diferentes nunca ven los datos de la otra.
+ *
+ * LIMITACIÓN CONOCIDA (para anotar en la tesis): las reglas de seguridad
+ * de Firestore están abiertas (cualquiera que conozca el código de finca
+ * puede leer/escribir esos datos). Es una decisión consciente para una
+ * prueba piloto con pocas personas conocidas; para producción real
+ * convendría agregar autenticación (usuario y contraseña).
  */
 
-const STORAGE_KEY = "libretaStock:v1";
-const DIAS_ALERTA_VENCIMIENTO = 7; // avisar si vence dentro de esta cantidad de días
+import { firebaseConfig } from "./firebase-config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
+const DIAS_ALERTA_VENCIMIENTO = 7; // avisar si vence dentro de esta cantidad de días
 const CATEGORIAS = ["Alimentos", "Limpieza", "Insumos", "Otros"];
+const PROFILE_KEY = "libretaStock:profileId";
 
 /* =====================================================================
-   1) CAPA DE DATOS
-   Un solo objeto en memoria (`state`) que se sincroniza con localStorage
-   cada vez que cambia. products = lista de productos.
-   movements = historial de entradas/salidas (para el registro y reportes).
+   1) FIREBASE: inicialización + identificación de la "finca" (perfil)
    ===================================================================== */
 
-function cargarEstado() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { products: [], movements: [] };
-    const data = JSON.parse(raw);
-    return {
-      products: Array.isArray(data.products) ? data.products : [],
-      movements: Array.isArray(data.movements) ? data.movements : [],
-    };
-  } catch (e) {
-    console.error("No se pudo leer el almacenamiento local:", e);
-    return { products: [], movements: [] };
-  }
-}
+const firebaseApp = initializeApp(firebaseConfig);
 
-function guardarEstado() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error("No se pudo guardar:", e);
-    mostrarToast("No se pudo guardar. Revisá el espacio del celular.");
-  }
-}
+// persistentLocalCache = guarda los datos también en el propio dispositivo
+// (IndexedDB), para que la app funcione offline igual que antes.
+const db = initializeFirestore(firebaseApp, {
+  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
+});
 
-let state = cargarEstado();
+let profileId = localStorage.getItem(PROFILE_KEY);
+
+// `state` sigue siendo el objeto en memoria que usa toda la interfaz.
+// Ahora se llena a partir de lo que llega de Firestore (ver sección 2),
+// no de localStorage directamente.
+let state = { products: [], movements: [] };
+
+function referenciaProductos() {
+  return collection(db, "profiles", profileId, "products");
+}
+function referenciaMovimientos() {
+  return collection(db, "profiles", profileId, "movements");
+}
 
 function generarId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+/* =====================================================================
+   1.1) MODAL: elegir código de finca (una sola vez por dispositivo)
+   ===================================================================== */
+
+function iniciarConPerfil(id) {
+  profileId = id.trim();
+  localStorage.setItem(PROFILE_KEY, profileId);
+  document.getElementById("modal-perfil").hidden = true;
+  suscribirseAFirestore();
+}
+
+document.getElementById("form-perfil").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const valor = document.getElementById("f-perfil").value.trim();
+  if (!valor) return;
+  iniciarConPerfil(valor);
+});
+
+document.getElementById("btn-cambiar-perfil").addEventListener("click", () => {
+  if (!confirm("Vas a dejar de ver los datos de esta finca en este dispositivo y vas a poder cargar otro código. ¿Continuar?")) return;
+  localStorage.removeItem(PROFILE_KEY);
+  location.reload();
+});
+
+/* =====================================================================
+   1.2) Escuchar cambios en tiempo real (esto reemplaza a guardarEstado)
+   Cada vez que algo cambia -acá o en otro dispositivo con el mismo
+   código de finca- estas funciones se disparan solas y redibujan la app.
+   ===================================================================== */
+
+function suscribirseAFirestore() {
+  onSnapshot(referenciaProductos(), (snapshot) => {
+    state.products = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando productos:", error);
+  });
+
+  onSnapshot(referenciaMovimientos(), (snapshot) => {
+    state.movements = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando movimientos:", error);
+  });
+}
+
+if (profileId) {
+  suscribirseAFirestore();
+} else {
+  document.getElementById("modal-perfil").hidden = false;
 }
 
 /* =====================================================================
@@ -344,27 +412,32 @@ formProducto.addEventListener("submit", (e) => {
   if (!datos.name) return;
 
   if (productoEnEdicion) {
-    const p = state.products.find((x) => x.id === productoEnEdicion);
-    Object.assign(p, datos);
+    setDoc(doc(referenciaProductos(), productoEnEdicion), datos, { merge: true })
+      .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
     mostrarToast("Producto actualizado");
   } else {
-    state.products.push({ id: generarId(), createdAt: new Date().toISOString(), ...datos });
+    const nuevoId = generarId();
+    setDoc(doc(referenciaProductos(), nuevoId), { ...datos, createdAt: new Date().toISOString() })
+      .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
     mostrarToast("Producto agregado");
   }
 
-  guardarEstado();
+  // No hace falta llamar a renderizarTodo() acá: apenas Firestore confirma el
+  // cambio en su copia local (instantáneo, incluso offline), el listener de
+  // la sección 1.2 se dispara solo y redibuja la pantalla.
   cerrarModalProducto();
-  renderizarTodo();
 });
 
 document.getElementById("btn-eliminar-producto").addEventListener("click", () => {
   if (!productoEnEdicion) return;
   if (!confirm("¿Eliminar este producto? También se borrará su historial de movimientos.")) return;
-  state.products = state.products.filter((p) => p.id !== productoEnEdicion);
-  state.movements = state.movements.filter((m) => m.productId !== productoEnEdicion);
-  guardarEstado();
+
+  deleteDoc(doc(referenciaProductos(), productoEnEdicion)).catch(console.error);
+  state.movements
+    .filter((m) => m.productId === productoEnEdicion)
+    .forEach((m) => deleteDoc(doc(referenciaMovimientos(), m.id)).catch(console.error));
+
   cerrarModalProducto();
-  renderizarTodo();
   mostrarToast("Producto eliminado");
 });
 
@@ -409,22 +482,22 @@ formMov.addEventListener("submit", (e) => {
     if (!confirm(`Solo quedan ${p.quantity} ${p.unit}. ¿Registrar igual y dejar el stock en 0?`)) return;
   }
 
-  p.quantity = movEnCurso.tipo === "entrada"
+  const nuevaCantidad = movEnCurso.tipo === "entrada"
     ? round2(p.quantity + cantidad)
     : round2(Math.max(0, p.quantity - cantidad));
 
-  state.movements.push({
-    id: generarId(),
+  setDoc(doc(referenciaProductos(), p.id), { quantity: nuevaCantidad }, { merge: true })
+    .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+
+  setDoc(doc(referenciaMovimientos(), generarId()), {
     productId: p.id,
     type: movEnCurso.tipo,
     quantity: cantidad,
     date: new Date().toISOString(),
     note: document.getElementById("mv-nota").value.trim() || null,
-  });
+  }).catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
 
-  guardarEstado();
   cerrarModalMovimiento();
-  renderizarTodo();
   mostrarToast(movEnCurso.tipo === "entrada" ? "Entrada registrada" : "Salida registrada");
 });
 
@@ -462,10 +535,15 @@ document.getElementById("input-importar").addEventListener("change", (e) => {
       if (!Array.isArray(data.products) || !Array.isArray(data.movements)) {
         throw new Error("Formato inválido");
       }
-      if (!confirm("Esto va a reemplazar los datos actuales por los de la copia. ¿Continuar?")) return;
-      state = { products: data.products, movements: data.movements };
-      guardarEstado();
-      renderizarTodo();
+      if (!confirm("Esto va a agregar los productos y movimientos de la copia a los datos actuales de esta finca. ¿Continuar?")) return;
+      data.products.forEach((p) => {
+        const { id, ...datos } = p;
+        setDoc(doc(referenciaProductos(), id || generarId()), datos).catch(console.error);
+      });
+      data.movements.forEach((m) => {
+        const { id, ...datos } = m;
+        setDoc(doc(referenciaMovimientos(), id || generarId()), datos).catch(console.error);
+      });
       modalBackup.hidden = true;
       mostrarToast("Datos restaurados");
     } catch (err) {
@@ -490,6 +568,8 @@ if ("serviceWorker" in navigator) {
 
 /* =====================================================================
    INICIO
+   Pintamos una vez con lo que haya (vacío si es la primera vez); en cuanto
+   Firestore responda, el listener de la sección 1.2 vuelve a redibujar.
    ===================================================================== */
 
 renderizarTodo();
