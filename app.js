@@ -185,7 +185,11 @@ function consumoDiarioPromedio(productId) {
   const salidas = state.movements.filter(
     (m) => m.productId === productId && m.type === "salida" && new Date(m.date) >= limite
   );
-  if (salidas.length === 0) return null;
+  // Con un solo registro de salida no hay forma honesta de estimar un
+  // "ritmo" de consumo (¿esos 9kg se comieron en un día, o en una semana
+  // que se cargó como un solo movimiento? no hay cómo saberlo con 1 dato).
+  // Por eso pedimos al menos 2 salidas antes de animarnos a predecir algo.
+  if (salidas.length < 2) return null;
 
   const total = salidas.reduce((acc, m) => acc + m.quantity, 0);
   const fechaMasAntigua = salidas.reduce(
