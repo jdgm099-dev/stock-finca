@@ -19,6 +19,14 @@
 
 * { box-sizing: border-box; }
 
+/* Asegura que las vistas controladas por JavaScript respeten el atributo hidden. */
+.view[hidden],
+.tabs[hidden],
+.fab[hidden],
+.modal-overlay[hidden] {
+  display: none !important;
+}
+
 html, body {
   height: 100%;
   margin: 0;
