@@ -20,12 +20,29 @@
 
   <!-- ===================== HEADER ===================== -->
   <header class="app-header">
-    <h1>Libreta de Stock</h1>
+    <button id="btn-volver" class="icon-btn" title="Volver" aria-label="Volver" hidden>←</button>
+    <h1 id="header-titulo">Mi Finca</h1>
     <button id="btn-backup" class="icon-btn" title="Copia de seguridad" aria-label="Copia de seguridad">⇅</button>
   </header>
 
+  <!-- ===================== PANTALLA PRINCIPAL (elegir sección) ===================== -->
+  <main id="view-landing" class="view">
+    <div class="landing-grid">
+      <button class="landing-card" data-seccion="stock">
+        <span class="landing-icon">📦</span>
+        <span class="landing-title">Libreta de Stock</span>
+        <span class="landing-sub">Víveres e insumos</span>
+      </button>
+      <button class="landing-card" data-seccion="ganado">
+        <span class="landing-icon">🐄</span>
+        <span class="landing-title">Ganado</span>
+        <span class="landing-sub">Animales y lotes</span>
+      </button>
+    </div>
+  </main>
+
   <!-- ===================== CONTENIDO ===================== -->
-  <main id="view-inicio" class="view">
+  <main id="view-inicio" class="view" hidden>
     <section id="alertas-box" class="ledger-box" hidden>
       <h2 class="ledger-heading alert-heading">Para revisar</h2>
       <ul id="alertas-list" class="alert-list"></ul>
@@ -45,6 +62,10 @@
         <div class="stat">
           <span class="stat-num" id="stat-vencer">0</span>
           <span class="stat-label">por vencer</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" id="stat-animales">0</span>
+          <span class="stat-label">animales</span>
         </div>
       </div>
     </section>
@@ -67,11 +88,17 @@
     <p id="movimientos-empty" class="empty-msg" hidden>Todavía no hay movimientos registrados.</p>
   </main>
 
-  <!-- ===================== FAB ===================== -->
-  <button id="btn-agregar" class="fab">+ Agregar producto</button>
+  <main id="view-ganado" class="view" hidden>
+    <div class="cat-filter" id="ganado-filter" role="tablist" aria-label="Filtrar por lote"></div>
+    <div id="ganado-list"></div>
+    <p id="ganado-empty" class="empty-msg" hidden>No hay animales cargados todavía. Tocá "Agregar animal" para empezar.</p>
+  </main>
 
-  <!-- ===================== TABS LATERALES ===================== -->
-  <nav class="tabs" aria-label="Secciones">
+  <!-- ===================== FAB (cambia según la pantalla activa) ===================== -->
+  <button id="btn-agregar" class="fab" hidden>+ Agregar producto</button>
+
+  <!-- ===================== TABS (solo dentro de "Libreta de Stock") ===================== -->
+  <nav class="tabs" aria-label="Secciones de Stock" id="tabs-stock" hidden>
     <button class="tab active" data-view="inicio">
       <span class="tab-mark">Inicio</span>
     </button>
@@ -136,6 +163,75 @@
       <div class="modal-actions">
         <button type="button" id="btn-eliminar-producto" class="btn btn-danger" hidden>Eliminar</button>
         <button type="button" id="btn-cancelar-producto" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: agregar/editar animal ===================== -->
+<div id="modal-animal" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-animal-titulo">
+    <h2 id="modal-animal-titulo">Agregar animal</h2>
+    <form id="form-animal">
+      <label>
+        Caravana / identificación
+        <input type="text" id="a-caravana" required maxlength="30" placeholder="Ej: 245" />
+      </label>
+
+      <div class="field-row">
+        <label>
+          Categoría
+          <select id="a-categoria">
+            <option value="Ternero/a">Ternero/a</option>
+            <option value="Vaquillona">Vaquillona</option>
+            <option value="Novillo">Novillo</option>
+            <option value="Vaca">Vaca</option>
+            <option value="Toro">Toro</option>
+            <option value="Buey">Buey</option>
+          </select>
+        </label>
+        <label>
+          Sexo
+          <select id="a-sexo">
+            <option value="Hembra">Hembra</option>
+            <option value="Macho">Macho</option>
+          </select>
+        </label>
+      </div>
+
+      <label>
+        Lote
+        <input type="text" id="a-lote" maxlength="40" placeholder="Ej: Lote 3" />
+      </label>
+
+      <div class="field-row">
+        <label>
+          Estado
+          <select id="a-estado">
+            <option value="Activo">Activo</option>
+            <option value="Vendido">Vendido</option>
+            <option value="Muerto">Muerto</option>
+            <option value="Baja">Baja</option>
+          </select>
+        </label>
+        <label>
+          Origen
+          <select id="a-origen">
+            <option value="Nacimiento">Nacimiento</option>
+            <option value="Compra">Compra</option>
+          </select>
+        </label>
+      </div>
+
+      <label>
+        Fecha de ingreso
+        <input type="date" id="a-fecha-ingreso" />
+      </label>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-eliminar-animal" class="btn btn-danger" hidden>Eliminar</button>
+        <button type="button" id="btn-cancelar-animal" class="btn btn-ghost">Cancelar</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
     </form>
