@@ -64,13 +64,16 @@ let profileId = localStorage.getItem(PROFILE_KEY);
 // `state` sigue siendo el objeto en memoria que usa toda la interfaz.
 // Ahora se llena a partir de lo que llega de Firestore (ver sección 2),
 // no de localStorage directamente.
-let state = { products: [], movements: [] };
+let state = { products: [], movements: [], animals: [] };
 
 function referenciaProductos() {
   return collection(db, "profiles", profileId, "products");
 }
 function referenciaMovimientos() {
   return collection(db, "profiles", profileId, "movements");
+}
+function referenciaAnimales() {
+  return collection(db, "profiles", profileId, "animals");
 }
 
 function generarId() {
@@ -120,6 +123,13 @@ function suscribirseAFirestore() {
     renderizarTodo();
   }, (error) => {
     console.error("Error escuchando movimientos:", error);
+  });
+
+  onSnapshot(referenciaAnimales(), (snapshot) => {
+    state.animals = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando animales:", error);
   });
 }
 
@@ -223,23 +233,94 @@ function mostrarToast(mensaje) {
 }
 
 /* =====================================================================
-   3) NAVEGACIÓN ENTRE VISTAS (Inicio / Inventario / Movimientos)
+   3) NAVEGACIÓN
+   La app tiene una pantalla principal (landing) donde se elige entre
+   "Libreta de Stock" y "Ganado". Cada sección es su propio mini-mundo:
+   Stock tiene sus 3 pestañas de siempre (Inicio/Inventario/Movimientos);
+   Ganado por ahora es una sola pantalla (más adelante, cuando sumemos
+   Pesajes/Potreros, va a tener su propia barra de pestañas también).
    ===================================================================== */
 
-const vistas = ["inicio", "inventario", "movimientos"];
+const TODAS_LAS_VISTAS = ["landing", "inicio", "inventario", "ganado", "movimientos"];
+const VISTAS_DE_STOCK = ["inicio", "inventario", "movimientos"];
 
-function irAVista(nombre) {
-  vistas.forEach((v) => {
+let seccionActual = "landing"; // "landing" | "stock" | "ganado"
+let vistaStockActual = "inicio"; // solo aplica cuando seccionActual === "stock"
+
+const TITULOS = { landing: "Mi Finca", stock: "Libreta de Stock", ganado: "Ganado" };
+
+// El botón flotante (+) hace algo distinto según dónde estés. En Inicio y
+// Movimientos (dentro de Stock) no tiene sentido "agregar" nada directo.
+const FAB_CONFIG = {
+  inventario: { texto: "+ Agregar producto", accion: () => abrirModalNuevoProducto() },
+  ganado: { texto: "+ Agregar animal", accion: () => abrirModalNuevoAnimal() },
+};
+
+function mostrarVista(nombre) {
+  TODAS_LAS_VISTAS.forEach((v) => {
     document.getElementById(`view-${v}`).hidden = v !== nombre;
   });
-  document.querySelectorAll(".tabs .tab").forEach((btn) => {
+}
+
+function actualizarFab(clave) {
+  const fab = document.getElementById("btn-agregar");
+  const config = FAB_CONFIG[clave];
+  fab.hidden = !config;
+  if (config) fab.textContent = config.texto;
+}
+
+// Ir a la pantalla principal (landing)
+function irALanding() {
+  seccionActual = "landing";
+  document.getElementById("header-titulo").textContent = TITULOS.landing;
+  document.getElementById("btn-volver").hidden = true;
+  document.getElementById("tabs-stock").hidden = true;
+  mostrarVista("landing");
+  actualizarFab(null);
+}
+
+// Entrar a una sección desde el landing ("stock" o "ganado")
+function entrarASeccion(seccion) {
+  seccionActual = seccion;
+  document.getElementById("header-titulo").textContent = TITULOS[seccion];
+  document.getElementById("btn-volver").hidden = false;
+
+  if (seccion === "stock") {
+    document.getElementById("tabs-stock").hidden = false;
+    irAVistaStock(vistaStockActual);
+  } else {
+    document.getElementById("tabs-stock").hidden = true;
+    mostrarVista("ganado");
+    actualizarFab("ganado");
+    renderizarTodo();
+  }
+}
+
+// Cambiar de pestaña dentro de Stock (Inicio/Inventario/Movimientos)
+function irAVistaStock(nombre) {
+  vistaStockActual = nombre;
+  mostrarVista(nombre);
+  document.querySelectorAll("#tabs-stock .tab").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === nombre);
   });
+  actualizarFab(nombre);
   renderizarTodo();
 }
 
-document.querySelectorAll(".tabs .tab").forEach((btn) => {
-  btn.addEventListener("click", () => irAVista(btn.dataset.view));
+document.querySelectorAll(".landing-card").forEach((btn) => {
+  btn.addEventListener("click", () => entrarASeccion(btn.dataset.seccion));
+});
+
+document.getElementById("btn-volver").addEventListener("click", irALanding);
+
+document.querySelectorAll("#tabs-stock .tab").forEach((btn) => {
+  btn.addEventListener("click", () => irAVistaStock(btn.dataset.view));
+});
+
+document.getElementById("btn-agregar").addEventListener("click", () => {
+  const clave = seccionActual === "stock" ? vistaStockActual : seccionActual;
+  const config = FAB_CONFIG[clave];
+  if (config) config.accion();
 });
 
 /* =====================================================================
@@ -283,6 +364,7 @@ function renderizarInicio() {
   document.getElementById("stat-productos").textContent = state.products.length;
   document.getElementById("stat-bajos").textContent = bajos.length;
   document.getElementById("stat-vencer").textContent = porVencer.length;
+  document.getElementById("stat-animales").textContent = state.animals.filter((a) => a.estado === "Activo").length;
 
   const ultimos = [...state.movements].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const ul = document.getElementById("ultimos-movs");
@@ -407,12 +489,80 @@ function crearFilaMovimiento(m) {
 }
 
 /* =====================================================================
+   6.5) RENDER: GANADO (filtro por lote + fichas de animal)
+   ===================================================================== */
+
+let loteActivo = "Todos";
+
+function renderizarFiltroLotes() {
+  const cont = document.getElementById("ganado-filter");
+  cont.innerHTML = "";
+  const lotes = Array.from(new Set(state.animals.map((a) => a.lote || "Sin lote"))).sort((a, b) => a.localeCompare(b, "es"));
+  const opciones = ["Todos", ...lotes];
+  opciones.forEach((lote) => {
+    const btn = document.createElement("button");
+    btn.className = "cat-chip" + (lote === loteActivo ? " active" : "");
+    btn.textContent = lote;
+    btn.addEventListener("click", () => {
+      loteActivo = lote;
+      renderizarGanado();
+    });
+    cont.appendChild(btn);
+  });
+}
+
+function renderizarGanado() {
+  renderizarFiltroLotes();
+  const cont = document.getElementById("ganado-list");
+  cont.innerHTML = "";
+
+  const animales = state.animals.filter(
+    (a) => loteActivo === "Todos" || (a.lote || "Sin lote") === loteActivo
+  );
+
+  document.getElementById("ganado-empty").hidden = state.animals.length > 0;
+
+  const lotesAMostrar = loteActivo === "Todos"
+    ? Array.from(new Set(animales.map((a) => a.lote || "Sin lote"))).sort((a, b) => a.localeCompare(b, "es"))
+    : [loteActivo];
+
+  lotesAMostrar.forEach((lote) => {
+    const items = animales.filter((a) => (a.lote || "Sin lote") === lote)
+      .sort((a, b) => a.caravana.localeCompare(b.caravana, "es", { numeric: true }));
+    if (items.length === 0) return;
+
+    const grupo = document.createElement("div");
+    grupo.className = "cat-group";
+    grupo.innerHTML = `<h3 class="cat-group-title">${escapeHTML(lote)} (${items.length})</h3>`;
+    items.forEach((a) => grupo.appendChild(crearFilaAnimal(a)));
+    cont.appendChild(grupo);
+  });
+}
+
+function crearFilaAnimal(a) {
+  const row = document.createElement("div");
+  row.className = "item-row" + (a.estado !== "Activo" ? " low" : "");
+
+  const info = document.createElement("div");
+  info.className = "item-info";
+  let metaHTML = `${escapeHTML(a.categoria)} · ${escapeHTML(a.sexo)}`;
+  let metaClass = "item-meta";
+  if (a.estado !== "Activo") { metaHTML += ` · ${escapeHTML(a.estado)}`; metaClass += " warn"; }
+  info.innerHTML = `<span class="item-name">Caravana ${escapeHTML(a.caravana)}</span><span class="${metaClass}">${metaHTML}</span>`;
+  info.addEventListener("click", () => abrirModalAnimal(a.id));
+
+  row.appendChild(info);
+  return row;
+}
+
+/* =====================================================================
    7) RENDER GENERAL
    ===================================================================== */
 
 function renderizarTodo() {
   renderizarInicio();
   renderizarInventario();
+  renderizarGanado();
   renderizarMovimientos();
 }
 
@@ -461,7 +611,6 @@ function cerrarModalProducto() {
   productoEnEdicion = null;
 }
 
-document.getElementById("btn-agregar").addEventListener("click", abrirModalNuevoProducto);
 document.getElementById("btn-cancelar-producto").addEventListener("click", cerrarModalProducto);
 
 formProducto.addEventListener("submit", (e) => {
@@ -505,6 +654,82 @@ document.getElementById("btn-eliminar-producto").addEventListener("click", () =>
 
   cerrarModalProducto();
   mostrarToast("Producto eliminado");
+});
+
+/* =====================================================================
+   8.5) MODAL: agregar / editar animal
+   ===================================================================== */
+
+const modalAnimal = document.getElementById("modal-animal");
+const formAnimal = document.getElementById("form-animal");
+let animalEnEdicion = null;
+
+function abrirModalNuevoAnimal() {
+  animalEnEdicion = null;
+  document.getElementById("modal-animal-titulo").textContent = "Agregar animal";
+  document.getElementById("btn-eliminar-animal").hidden = true;
+  formAnimal.reset();
+  document.getElementById("a-fecha-ingreso").value = new Date().toISOString().slice(0, 10);
+  modalAnimal.hidden = false;
+  setTimeout(() => document.getElementById("a-caravana").focus(), 50);
+}
+
+function abrirModalAnimal(id) {
+  const a = state.animals.find((x) => x.id === id);
+  if (!a) return;
+  animalEnEdicion = id;
+  document.getElementById("modal-animal-titulo").textContent = "Editar animal";
+  document.getElementById("btn-eliminar-animal").hidden = false;
+  document.getElementById("a-caravana").value = a.caravana;
+  document.getElementById("a-categoria").value = a.categoria;
+  document.getElementById("a-sexo").value = a.sexo;
+  document.getElementById("a-lote").value = a.lote || "";
+  document.getElementById("a-estado").value = a.estado;
+  document.getElementById("a-origen").value = a.origen;
+  document.getElementById("a-fecha-ingreso").value = a.fechaIngreso || "";
+  modalAnimal.hidden = false;
+}
+
+function cerrarModalAnimal() {
+  modalAnimal.hidden = true;
+  animalEnEdicion = null;
+}
+
+document.getElementById("btn-cancelar-animal").addEventListener("click", cerrarModalAnimal);
+
+formAnimal.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const datos = {
+    caravana: document.getElementById("a-caravana").value.trim(),
+    categoria: document.getElementById("a-categoria").value,
+    sexo: document.getElementById("a-sexo").value,
+    lote: document.getElementById("a-lote").value.trim(),
+    estado: document.getElementById("a-estado").value,
+    origen: document.getElementById("a-origen").value,
+    fechaIngreso: document.getElementById("a-fecha-ingreso").value || null,
+  };
+
+  if (!datos.caravana) return;
+
+  if (animalEnEdicion) {
+    setDoc(doc(referenciaAnimales(), animalEnEdicion), datos, { merge: true })
+      .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+    mostrarToast("Animal actualizado");
+  } else {
+    setDoc(doc(referenciaAnimales(), generarId()), { ...datos, createdAt: new Date().toISOString() })
+      .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+    mostrarToast("Animal agregado");
+  }
+
+  cerrarModalAnimal();
+});
+
+document.getElementById("btn-eliminar-animal").addEventListener("click", () => {
+  if (!animalEnEdicion) return;
+  if (!confirm("¿Eliminar este animal del registro?")) return;
+  deleteDoc(doc(referenciaAnimales(), animalEnEdicion)).catch(console.error);
+  cerrarModalAnimal();
+  mostrarToast("Animal eliminado");
 });
 
 /* =====================================================================
@@ -639,8 +864,10 @@ if ("serviceWorker" in navigator) {
 
 /* =====================================================================
    INICIO
-   Pintamos una vez con lo que haya (vacío si es la primera vez); en cuanto
-   Firestore responda, el listener de la sección 1.2 vuelve a redibujar.
+   Arranca en la pantalla principal (landing). Pintamos una vez con lo que
+   haya (vacío si es la primera vez); en cuanto Firestore responda, el
+   listener de la sección 1.2 vuelve a redibujar.
    ===================================================================== */
 
+irALanding();
 renderizarTodo();
