@@ -94,6 +94,11 @@
     <p id="ganado-empty" class="empty-msg" hidden>No hay animales cargados todavía. Tocá "Agregar animal" para empezar.</p>
   </main>
 
+  <main id="view-ganado-movimientos" class="view" hidden>
+    <ul id="ganado-movimientos-list" class="mov-list full"></ul>
+    <p id="ganado-movimientos-empty" class="empty-msg" hidden>Todavía no hay ingresos, egresos ni recategorizaciones registrados.</p>
+  </main>
+
   <!-- ===================== FAB (cambia según la pantalla activa) ===================== -->
   <button id="btn-agregar" class="fab" hidden>+ Agregar producto</button>
 
@@ -106,6 +111,16 @@
       <span class="tab-mark">Inventario</span>
     </button>
     <button class="tab" data-view="movimientos">
+      <span class="tab-mark">Movimientos</span>
+    </button>
+  </nav>
+
+  <!-- ===================== TABS (solo dentro de "Ganado") ===================== -->
+  <nav class="tabs" aria-label="Secciones de Ganado" id="tabs-ganado" hidden>
+    <button class="tab active" data-view="ganado">
+      <span class="tab-mark">Animales</span>
+    </button>
+    <button class="tab" data-view="ganado-movimientos">
       <span class="tab-mark">Movimientos</span>
     </button>
   </nav>
@@ -179,26 +194,28 @@
         <input type="text" id="a-caravana" required maxlength="30" placeholder="Ej: 245" />
       </label>
 
-      <div class="field-row">
-        <label>
-          Categoría
-          <select id="a-categoria">
-            <option value="Ternero/a">Ternero/a</option>
-            <option value="Vaquillona">Vaquillona</option>
-            <option value="Novillo">Novillo</option>
-            <option value="Vaca">Vaca</option>
-            <option value="Toro">Toro</option>
-            <option value="Buey">Buey</option>
-          </select>
-        </label>
-        <label>
-          Sexo
-          <select id="a-sexo">
-            <option value="Hembra">Hembra</option>
-            <option value="Macho">Macho</option>
-          </select>
-        </label>
-      </div>
+      <label id="a-categoria-wrap">
+        Categoría
+        <select id="a-categoria">
+          <option value="Ternero/a">Ternero/a</option>
+          <option value="Torito">Torito</option>
+          <option value="Novillito">Novillito</option>
+          <option value="Novillo">Novillo</option>
+          <option value="Toro">Toro</option>
+          <option value="Vaquillona">Vaquillona</option>
+          <option value="Vaca">Vaca</option>
+          <option value="Vaca de descarte">Vaca de descarte</option>
+        </select>
+      </label>
+      <p id="a-categoria-nota" class="modal-subtitle" hidden>La categoría de un animal que ya existe se cambia con el botón "Recategorizar" de abajo, así queda guardado el historial. Acá solo se puede elegir la categoría inicial.</p>
+
+      <label>
+        Sexo
+        <select id="a-sexo">
+          <option value="Hembra">Hembra</option>
+          <option value="Macho">Macho</option>
+        </select>
+      </label>
 
       <label>
         Lote
@@ -229,10 +246,84 @@
         <input type="date" id="a-fecha-ingreso" />
       </label>
 
+      <div class="modal-actions" id="a-acciones-historial" hidden>
+        <button type="button" id="btn-recategorizar-animal" class="btn btn-ghost">↻ Recategorizar</button>
+        <button type="button" id="btn-egreso-animal" class="btn btn-ghost">↪ Registrar egreso</button>
+      </div>
+
       <div class="modal-actions">
         <button type="button" id="btn-eliminar-animal" class="btn btn-danger" hidden>Eliminar</button>
         <button type="button" id="btn-cancelar-animal" class="btn btn-ghost">Cancelar</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: recategorizar animal ===================== -->
+<div id="modal-recategorizar" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-recategorizar-titulo">
+    <h2 id="modal-recategorizar-titulo">Recategorizar animal</h2>
+    <p id="recategorizar-subtitulo" class="modal-subtitle"></p>
+    <form id="form-recategorizar">
+      <label>
+        Nueva categoría
+        <select id="rc-categoria">
+          <option value="Ternero/a">Ternero/a</option>
+          <option value="Torito">Torito</option>
+          <option value="Novillito">Novillito</option>
+          <option value="Novillo">Novillo</option>
+          <option value="Toro">Toro</option>
+          <option value="Vaquillona">Vaquillona</option>
+          <option value="Vaca">Vaca</option>
+          <option value="Vaca de descarte">Vaca de descarte</option>
+        </select>
+      </label>
+      <label>
+        Fecha
+        <input type="date" id="rc-fecha" required />
+      </label>
+      <label>
+        Nota (opcional)
+        <input type="text" id="rc-nota" maxlength="80" placeholder="Ej: entró en servicio" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancelar-recategorizar" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Confirmar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: registrar egreso de animal ===================== -->
+<div id="modal-egreso-animal" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-egreso-animal-titulo">
+    <h2 id="modal-egreso-animal-titulo">Registrar egreso</h2>
+    <p id="egreso-animal-subtitulo" class="modal-subtitle"></p>
+    <form id="form-egreso-animal">
+      <label>
+        Motivo
+        <select id="eg-motivo">
+          <option value="Venta">Venta</option>
+          <option value="Muerte">Muerte</option>
+          <option value="Baja">Baja</option>
+        </select>
+      </label>
+      <label>
+        Fecha
+        <input type="date" id="eg-fecha" required />
+      </label>
+      <label>
+        Nº de Guía de Traslado SENACSA (opcional)
+        <input type="text" id="eg-guia" maxlength="40" placeholder="Ej: 000123456" />
+      </label>
+      <label>
+        Nota (opcional)
+        <input type="text" id="eg-nota" maxlength="80" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancelar-egreso-animal" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Confirmar</button>
       </div>
     </form>
   </div>
