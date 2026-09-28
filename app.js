@@ -47,13 +47,28 @@ const DIAS_ALERTA_VENCIMIENTO = 7; // avisar si vence dentro de esta cantidad de
 const CATEGORIAS = ["Alimentos", "Limpieza", "Insumos", "Otros"];
 const PROFILE_KEY = "libretaStock:profileId";
 
-// Categorías estándar de bovinos (el "caminito" que sigue cada animal:
-// Ternero/a → Vaquillona → Vaca, o Ternero/a → Torito/Novillito → Toro/Novillo).
-// Se cambian con "Recategorizar", no editando el animal directamente, para
-// que quede guardado el historial de cuándo pasó de una a otra.
-const CATEGORIAS_GANADO = [
-  "Ternero/a", "Torito", "Novillito", "Novillo", "Toro", "Vaquillona", "Vaca", "Vaca de descarte",
-];
+// Categorías estándar de bovinos (el "caminito" que sigue cada animal).
+// Dependen del sexo: una hembra nunca pasa a Toro, un macho nunca pasa a
+// Vaca. Se cambian con "Recategorizar", no editando el animal directamente,
+// para que quede guardado el historial de cuándo pasó de una a otra.
+const CATEGORIAS_POR_SEXO = {
+  Hembra: ["Ternero/a", "Vaquillona", "Vaca", "Vaca de descarte"],
+  Macho: ["Ternero/a", "Torito", "Novillito", "Novillo", "Toro"],
+};
+const CATEGORIAS_GANADO = [...new Set([...CATEGORIAS_POR_SEXO.Hembra, ...CATEGORIAS_POR_SEXO.Macho])];
+
+// Rellena un <select> con las categorías que corresponden a un sexo. Si el
+// animal ya tenía cargada una categoría que no está en esa lista (por
+// ejemplo, datos cargados antes de este cambio), se agrega igual al
+// principio para no perder ni esconder esa información.
+function poblarSelectCategorias(select, sexo, valorActual) {
+  const categorias = CATEGORIAS_POR_SEXO[sexo] || CATEGORIAS_GANADO;
+  const opciones = valorActual && !categorias.includes(valorActual)
+    ? [valorActual, ...categorias]
+    : categorias;
+  select.innerHTML = opciones.map((c) => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join("");
+  if (valorActual) select.value = valorActual;
+}
 
 /* =====================================================================
    1) FIREBASE: inicialización + identificación de la "finca" (perfil)
@@ -749,6 +764,9 @@ function abrirModalNuevoAnimal() {
   document.getElementById("a-categoria-nota").hidden = true;
   formAnimal.reset();
   document.getElementById("a-fecha-ingreso").value = new Date().toISOString().slice(0, 10);
+  // La lista de categorías depende del sexo elegido (por defecto, el
+  // primero del <select>, que es "Hembra").
+  poblarSelectCategorias(document.getElementById("a-categoria"), document.getElementById("a-sexo").value, null);
   modalAnimal.hidden = false;
   setTimeout(() => document.getElementById("a-caravana").focus(), 50);
 }
@@ -766,14 +784,22 @@ function abrirModalAnimal(id) {
   document.getElementById("a-categoria").disabled = true;
   document.getElementById("a-categoria-nota").hidden = false;
   document.getElementById("a-caravana").value = a.caravana;
-  document.getElementById("a-categoria").value = a.categoria;
   document.getElementById("a-sexo").value = a.sexo;
+  poblarSelectCategorias(document.getElementById("a-categoria"), a.sexo, a.categoria);
   document.getElementById("a-lote").value = a.lote || "";
   document.getElementById("a-estado").value = a.estado;
   document.getElementById("a-origen").value = a.origen;
   document.getElementById("a-fecha-ingreso").value = a.fechaIngreso || "";
   modalAnimal.hidden = false;
 }
+
+// Si cambiás el sexo (solo pasa al cargar un animal nuevo, ya que al
+// editar la categoría queda bloqueada), la lista de categorías se actualiza
+// para mostrar solo las que tienen sentido para ese sexo.
+document.getElementById("a-sexo").addEventListener("change", (e) => {
+  if (document.getElementById("a-categoria").disabled) return;
+  poblarSelectCategorias(document.getElementById("a-categoria"), e.target.value, null);
+});
 
 function cerrarModalAnimal() {
   modalAnimal.hidden = true;
@@ -842,8 +868,8 @@ document.getElementById("btn-recategorizar-animal").addEventListener("click", ()
   if (!animalEnEdicion) return;
   const a = state.animals.find((x) => x.id === animalEnEdicion);
   if (!a) return;
-  document.getElementById("recategorizar-subtitulo").textContent = `Caravana ${a.caravana} — categoría actual: ${a.categoria}`;
-  document.getElementById("rc-categoria").value = a.categoria;
+  document.getElementById("recategorizar-subtitulo").textContent = `Caravana ${a.caravana} (${a.sexo}) — categoría actual: ${a.categoria}`;
+  poblarSelectCategorias(document.getElementById("rc-categoria"), a.sexo, a.categoria);
   document.getElementById("rc-fecha").value = new Date().toISOString().slice(0, 10);
   document.getElementById("rc-nota").value = "";
   modalAnimal.hidden = true;
