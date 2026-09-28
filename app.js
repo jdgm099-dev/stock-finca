@@ -47,6 +47,14 @@ const DIAS_ALERTA_VENCIMIENTO = 7; // avisar si vence dentro de esta cantidad de
 const CATEGORIAS = ["Alimentos", "Limpieza", "Insumos", "Otros"];
 const PROFILE_KEY = "libretaStock:profileId";
 
+// Categorías estándar de bovinos (el "caminito" que sigue cada animal:
+// Ternero/a → Vaquillona → Vaca, o Ternero/a → Torito/Novillito → Toro/Novillo).
+// Se cambian con "Recategorizar", no editando el animal directamente, para
+// que quede guardado el historial de cuándo pasó de una a otra.
+const CATEGORIAS_GANADO = [
+  "Ternero/a", "Torito", "Novillito", "Novillo", "Toro", "Vaquillona", "Vaca", "Vaca de descarte",
+];
+
 /* =====================================================================
    1) FIREBASE: inicialización + identificación de la "finca" (perfil)
    ===================================================================== */
@@ -64,7 +72,7 @@ let profileId = localStorage.getItem(PROFILE_KEY);
 // `state` sigue siendo el objeto en memoria que usa toda la interfaz.
 // Ahora se llena a partir de lo que llega de Firestore (ver sección 2),
 // no de localStorage directamente.
-let state = { products: [], movements: [], animals: [] };
+let state = { products: [], movements: [], animals: [], animalMovements: [] };
 
 function referenciaProductos() {
   return collection(db, "profiles", profileId, "products");
@@ -74,6 +82,9 @@ function referenciaMovimientos() {
 }
 function referenciaAnimales() {
   return collection(db, "profiles", profileId, "animals");
+}
+function referenciaMovimientosAnimales() {
+  return collection(db, "profiles", profileId, "animalMovements");
 }
 
 function generarId() {
@@ -130,6 +141,13 @@ function suscribirseAFirestore() {
     renderizarTodo();
   }, (error) => {
     console.error("Error escuchando animales:", error);
+  });
+
+  onSnapshot(referenciaMovimientosAnimales(), (snapshot) => {
+    state.animalMovements = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando movimientos de animales:", error);
   });
 }
 
@@ -235,22 +253,22 @@ function mostrarToast(mensaje) {
 /* =====================================================================
    3) NAVEGACIÓN
    La app tiene una pantalla principal (landing) donde se elige entre
-   "Libreta de Stock" y "Ganado". Cada sección es su propio mini-mundo:
-   Stock tiene sus 3 pestañas de siempre (Inicio/Inventario/Movimientos);
-   Ganado por ahora es una sola pantalla (más adelante, cuando sumemos
-   Pesajes/Potreros, va a tener su propia barra de pestañas también).
+   "Libreta de Stock" y "Ganado". Cada sección es su propio mini-mundo,
+   con su propia barra de pestañas: Stock tiene Inicio/Inventario/
+   Movimientos, Ganado tiene Animales/Movimientos.
    ===================================================================== */
 
-const TODAS_LAS_VISTAS = ["landing", "inicio", "inventario", "ganado", "movimientos"];
-const VISTAS_DE_STOCK = ["inicio", "inventario", "movimientos"];
+const TODAS_LAS_VISTAS = ["landing", "inicio", "inventario", "ganado", "ganado-movimientos", "movimientos"];
 
 let seccionActual = "landing"; // "landing" | "stock" | "ganado"
 let vistaStockActual = "inicio"; // solo aplica cuando seccionActual === "stock"
+let vistaGanadoActual = "ganado"; // solo aplica cuando seccionActual === "ganado"
 
 const TITULOS = { landing: "Mi Finca", stock: "Libreta de Stock", ganado: "Ganado" };
 
-// El botón flotante (+) hace algo distinto según dónde estés. En Inicio y
-// Movimientos (dentro de Stock) no tiene sentido "agregar" nada directo.
+// El botón flotante (+) hace algo distinto según dónde estés. En las
+// pestañas de "Movimientos" (de Stock o de Ganado) no tiene sentido
+// "agregar" nada directo ahí, así que el botón se esconde.
 const FAB_CONFIG = {
   inventario: { texto: "+ Agregar producto", accion: () => abrirModalNuevoProducto() },
   ganado: { texto: "+ Agregar animal", accion: () => abrirModalNuevoAnimal() },
@@ -275,6 +293,7 @@ function irALanding() {
   document.getElementById("header-titulo").textContent = TITULOS.landing;
   document.getElementById("btn-volver").hidden = true;
   document.getElementById("tabs-stock").hidden = true;
+  document.getElementById("tabs-ganado").hidden = true;
   mostrarVista("landing");
   actualizarFab(null);
 }
@@ -286,15 +305,30 @@ function entrarASeccion(seccion) {
   document.getElementById("btn-volver").hidden = false;
 
   if (seccion === "stock") {
+    document.getElementById("tabs-ganado").hidden = true;
     document.getElementById("tabs-stock").hidden = false;
     irAVistaStock(vistaStockActual);
   } else {
     document.getElementById("tabs-stock").hidden = true;
-    mostrarVista("ganado");
-    actualizarFab("ganado");
-    renderizarTodo();
+    document.getElementById("tabs-ganado").hidden = false;
+    irAVistaGanado(vistaGanadoActual);
   }
 }
+
+// Cambiar de pestaña dentro de Ganado (Animales/Movimientos)
+function irAVistaGanado(nombre) {
+  vistaGanadoActual = nombre;
+  mostrarVista(nombre);
+  document.querySelectorAll("#tabs-ganado .tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === nombre);
+  });
+  actualizarFab(nombre);
+  renderizarTodo();
+}
+
+document.querySelectorAll("#tabs-ganado .tab").forEach((btn) => {
+  btn.addEventListener("click", () => irAVistaGanado(btn.dataset.view));
+});
 
 // Cambiar de pestaña dentro de Stock (Inicio/Inventario/Movimientos)
 function irAVistaStock(nombre) {
@@ -318,7 +352,9 @@ document.querySelectorAll("#tabs-stock .tab").forEach((btn) => {
 });
 
 document.getElementById("btn-agregar").addEventListener("click", () => {
-  const clave = seccionActual === "stock" ? vistaStockActual : seccionActual;
+  const clave = seccionActual === "stock" ? vistaStockActual
+    : seccionActual === "ganado" ? vistaGanadoActual
+    : null;
   const config = FAB_CONFIG[clave];
   if (config) config.accion();
 });
@@ -556,6 +592,45 @@ function crearFilaAnimal(a) {
 }
 
 /* =====================================================================
+   6.6) RENDER: MOVIMIENTOS DE GANADO (ingresos, egresos, recategorizaciones)
+   ===================================================================== */
+
+const ETIQUETA_TIPO_MOV_ANIMAL = { ingreso: "Ingreso", egreso: "Egreso", recategorizacion: "Recateg." };
+const CLASE_TIPO_MOV_ANIMAL = { ingreso: "entrada", egreso: "salida", recategorizacion: "entrada" };
+
+function renderizarGanadoMovimientos() {
+  const ul = document.getElementById("ganado-movimientos-list");
+  ul.innerHTML = "";
+  const lista = [...state.animalMovements].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  document.getElementById("ganado-movimientos-empty").hidden = lista.length > 0;
+  lista.forEach((m) => ul.appendChild(crearFilaMovimientoAnimal(m)));
+}
+
+function crearFilaMovimientoAnimal(m) {
+  const li = document.createElement("li");
+  const animal = state.animals.find((a) => a.id === m.animalId);
+  const nombre = animal ? `Caravana ${animal.caravana}` : "(animal eliminado)";
+
+  let detalle = m.motivo || "";
+  if (m.tipo === "recategorizacion") {
+    detalle = `${escapeHTML(m.categoriaAnterior || "?")} → ${escapeHTML(m.categoriaNueva || "?")}`;
+  }
+  if (m.tipo === "egreso" && m.guiaSenacsa) {
+    detalle += ` · Guía SENACSA ${escapeHTML(m.guiaSenacsa)}`;
+  }
+
+  li.innerHTML = `
+    <div class="mov-main">
+      <span class="mov-tag ${CLASE_TIPO_MOV_ANIMAL[m.tipo]}">${ETIQUETA_TIPO_MOV_ANIMAL[m.tipo]}</span>
+      <div>${escapeHTML(nombre)} — ${detalle}</div>
+      ${m.nota ? `<div class="item-meta">${escapeHTML(m.nota)}</div>` : ""}
+    </div>
+    <div class="mov-date">${formatearFecha(m.fecha)}</div>
+  `;
+  return li;
+}
+
+/* =====================================================================
    7) RENDER GENERAL
    ===================================================================== */
 
@@ -563,6 +638,7 @@ function renderizarTodo() {
   renderizarInicio();
   renderizarInventario();
   renderizarGanado();
+  renderizarGanadoMovimientos();
   renderizarMovimientos();
 }
 
@@ -668,6 +744,9 @@ function abrirModalNuevoAnimal() {
   animalEnEdicion = null;
   document.getElementById("modal-animal-titulo").textContent = "Agregar animal";
   document.getElementById("btn-eliminar-animal").hidden = true;
+  document.getElementById("a-acciones-historial").hidden = true;
+  document.getElementById("a-categoria").disabled = false;
+  document.getElementById("a-categoria-nota").hidden = true;
   formAnimal.reset();
   document.getElementById("a-fecha-ingreso").value = new Date().toISOString().slice(0, 10);
   modalAnimal.hidden = false;
@@ -680,6 +759,12 @@ function abrirModalAnimal(id) {
   animalEnEdicion = id;
   document.getElementById("modal-animal-titulo").textContent = "Editar animal";
   document.getElementById("btn-eliminar-animal").hidden = false;
+  document.getElementById("a-acciones-historial").hidden = false;
+  // La categoría de un animal que ya existe no se edita a mano acá: se
+  // cambia con el botón "Recategorizar", para que quede guardado el
+  // historial de cuándo pasó de una categoría a otra.
+  document.getElementById("a-categoria").disabled = true;
+  document.getElementById("a-categoria-nota").hidden = false;
   document.getElementById("a-caravana").value = a.caravana;
   document.getElementById("a-categoria").value = a.categoria;
   document.getElementById("a-sexo").value = a.sexo;
@@ -716,8 +801,19 @@ formAnimal.addEventListener("submit", (e) => {
       .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
     mostrarToast("Animal actualizado");
   } else {
-    setDoc(doc(referenciaAnimales(), generarId()), { ...datos, createdAt: new Date().toISOString() })
+    const nuevoId = generarId();
+    setDoc(doc(referenciaAnimales(), nuevoId), { ...datos, createdAt: new Date().toISOString() })
       .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+
+    // El alta del animal ES el movimiento de "ingreso" (Nacimiento/Compra),
+    // así que queda registrado en el historial sin pedirle un paso extra.
+    setDoc(doc(referenciaMovimientosAnimales(), generarId()), {
+      animalId: nuevoId,
+      tipo: "ingreso",
+      motivo: datos.origen,
+      fecha: datos.fechaIngreso || new Date().toISOString().slice(0, 10),
+    }).catch(console.error);
+
     mostrarToast("Animal agregado");
   }
 
@@ -726,10 +822,110 @@ formAnimal.addEventListener("submit", (e) => {
 
 document.getElementById("btn-eliminar-animal").addEventListener("click", () => {
   if (!animalEnEdicion) return;
-  if (!confirm("¿Eliminar este animal del registro?")) return;
+  if (!confirm("¿Eliminar este animal del registro? También se borrará su historial de ingresos/egresos/recategorizaciones.")) return;
   deleteDoc(doc(referenciaAnimales(), animalEnEdicion)).catch(console.error);
+  state.animalMovements
+    .filter((m) => m.animalId === animalEnEdicion)
+    .forEach((m) => deleteDoc(doc(referenciaMovimientosAnimales(), m.id)).catch(console.error));
   cerrarModalAnimal();
   mostrarToast("Animal eliminado");
+});
+
+/* =====================================================================
+   8.6) MODAL: recategorizar animal
+   ===================================================================== */
+
+const modalRecategorizar = document.getElementById("modal-recategorizar");
+const formRecategorizar = document.getElementById("form-recategorizar");
+
+document.getElementById("btn-recategorizar-animal").addEventListener("click", () => {
+  if (!animalEnEdicion) return;
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  document.getElementById("recategorizar-subtitulo").textContent = `Caravana ${a.caravana} — categoría actual: ${a.categoria}`;
+  document.getElementById("rc-categoria").value = a.categoria;
+  document.getElementById("rc-fecha").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("rc-nota").value = "";
+  modalAnimal.hidden = true;
+  modalRecategorizar.hidden = false;
+});
+
+document.getElementById("btn-cancelar-recategorizar").addEventListener("click", () => {
+  modalRecategorizar.hidden = true;
+  modalAnimal.hidden = false;
+});
+
+formRecategorizar.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  const categoriaNueva = document.getElementById("rc-categoria").value;
+  const categoriaAnterior = a.categoria;
+
+  if (categoriaNueva === categoriaAnterior) {
+    mostrarToast("Elegí una categoría distinta a la actual");
+    return;
+  }
+
+  setDoc(doc(referenciaAnimales(), a.id), { categoria: categoriaNueva }, { merge: true }).catch(console.error);
+  setDoc(doc(referenciaMovimientosAnimales(), generarId()), {
+    animalId: a.id,
+    tipo: "recategorizacion",
+    categoriaAnterior,
+    categoriaNueva,
+    fecha: document.getElementById("rc-fecha").value,
+    nota: document.getElementById("rc-nota").value.trim() || null,
+  }).catch(console.error);
+
+  modalRecategorizar.hidden = true;
+  cerrarModalAnimal();
+  mostrarToast(`Recategorizado a ${categoriaNueva}`);
+});
+
+/* =====================================================================
+   8.7) MODAL: registrar egreso de animal (venta / muerte / baja)
+   ===================================================================== */
+
+const modalEgresoAnimal = document.getElementById("modal-egreso-animal");
+const formEgresoAnimal = document.getElementById("form-egreso-animal");
+
+document.getElementById("btn-egreso-animal").addEventListener("click", () => {
+  if (!animalEnEdicion) return;
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  document.getElementById("egreso-animal-subtitulo").textContent = `Caravana ${a.caravana} — se va a marcar como inactivo`;
+  document.getElementById("eg-motivo").value = "Venta";
+  document.getElementById("eg-fecha").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("eg-guia").value = "";
+  document.getElementById("eg-nota").value = "";
+  modalAnimal.hidden = true;
+  modalEgresoAnimal.hidden = false;
+});
+
+document.getElementById("btn-cancelar-egreso-animal").addEventListener("click", () => {
+  modalEgresoAnimal.hidden = true;
+  modalAnimal.hidden = false;
+});
+
+formEgresoAnimal.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  const motivo = document.getElementById("eg-motivo").value;
+
+  setDoc(doc(referenciaAnimales(), a.id), { estado: motivo }, { merge: true }).catch(console.error);
+  setDoc(doc(referenciaMovimientosAnimales(), generarId()), {
+    animalId: a.id,
+    tipo: "egreso",
+    motivo,
+    fecha: document.getElementById("eg-fecha").value,
+    guiaSenacsa: document.getElementById("eg-guia").value.trim() || null,
+    nota: document.getElementById("eg-nota").value.trim() || null,
+  }).catch(console.error);
+
+  modalEgresoAnimal.hidden = true;
+  cerrarModalAnimal();
+  mostrarToast(`Egreso registrado: ${motivo}`);
 });
 
 /* =====================================================================
