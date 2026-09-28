@@ -95,6 +95,7 @@ h1, h2, .tab-mark {
   z-index: 20;
   padding-bottom: var(--safe-bottom);
 }
+.tabs[hidden] { display: none; }
 .tabs .tab {
   flex: 1;
   background: none;
