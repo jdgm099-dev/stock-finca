@@ -250,9 +250,43 @@
         <button type="button" id="btn-egreso-animal" class="btn btn-ghost">↪ Registrar egreso</button>
       </div>
 
+      <div id="a-pesajes-seccion" hidden>
+        <h3 class="cat-group-title">Pesajes</h3>
+        <p id="a-pesajes-resumen" class="modal-subtitle"></p>
+        <ul id="a-pesajes-list" class="mov-list"></ul>
+        <p id="a-pesajes-empty" class="empty-msg" hidden>Todavía no tiene pesajes registrados.</p>
+        <button type="button" id="btn-agregar-pesaje" class="btn btn-ghost btn-full">⚖ Registrar pesaje</button>
+      </div>
+
       <div class="modal-actions">
         <button type="button" id="btn-eliminar-animal" class="btn btn-danger" hidden>Eliminar</button>
         <button type="button" id="btn-cancelar-animal" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: registrar pesaje ===================== -->
+<div id="modal-pesaje" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-pesaje-titulo">
+    <h2 id="modal-pesaje-titulo">Registrar pesaje</h2>
+    <p id="pesaje-subtitulo" class="modal-subtitle"></p>
+    <form id="form-pesaje">
+      <label>
+        Peso (kg)
+        <input type="number" id="ps-peso" required min="0" max="2000" step="any" inputmode="decimal" />
+      </label>
+      <label>
+        Fecha
+        <input type="date" id="ps-fecha" required />
+      </label>
+      <label>
+        Nota (opcional)
+        <input type="text" id="ps-nota" maxlength="80" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancelar-pesaje" class="btn btn-ghost">Cancelar</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
     </form>
