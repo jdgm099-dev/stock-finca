@@ -22,7 +22,10 @@
   <header class="app-header">
     <button id="btn-volver" class="icon-btn" title="Volver" aria-label="Volver" hidden>←</button>
     <h1 id="header-titulo">Mi Finca</h1>
-    <button id="btn-backup" class="icon-btn" title="Copia de seguridad" aria-label="Copia de seguridad">⇅</button>
+    <div class="header-acciones">
+      <button id="btn-reportes" class="icon-btn" title="Reportes" aria-label="Reportes" hidden>📄</button>
+      <button id="btn-backup" class="icon-btn" title="Copia de seguridad" aria-label="Copia de seguridad">⇅</button>
+    </div>
   </header>
 
   <!-- ===================== PANTALLA PRINCIPAL (elegir sección) ===================== -->
@@ -63,10 +66,6 @@
           <span class="stat-num" id="stat-vencer">0</span>
           <span class="stat-label">por vencer</span>
         </div>
-        <div class="stat">
-          <span class="stat-num" id="stat-animales">0</span>
-          <span class="stat-label">animales</span>
-        </div>
       </div>
     </section>
 
@@ -89,6 +88,7 @@
   </main>
 
   <main id="view-ganado" class="view" hidden>
+    <p id="ganado-resumen" class="modal-subtitle">0 animales activos</p>
     <div class="cat-filter" id="ganado-filter" role="tablist" aria-label="Filtrar por lote"></div>
     <div id="ganado-list"></div>
     <p id="ganado-empty" class="empty-msg" hidden>No hay animales cargados todavía. Tocá "Agregar animal" para empezar.</p>
@@ -412,6 +412,34 @@
       </label>
       <div class="modal-actions">
         <button type="submit" class="btn btn-primary">Empezar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: reportes (PDF / Excel) ===================== -->
+<div id="modal-reportes" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-reportes-titulo">
+    <h2 id="modal-reportes-titulo">Reportes</h2>
+    <p class="modal-subtitle">Se genera con los datos que ya están cargados, no hace falta conexión especial.</p>
+    <form id="form-reportes">
+      <label>
+        Contenido
+        <select id="rep-tipo">
+          <option value="actual">Estado actual (lo que hay hoy)</option>
+          <option value="historial">Historial de movimientos</option>
+        </select>
+      </label>
+      <label>
+        Formato
+        <select id="rep-formato">
+          <option value="pdf">PDF</option>
+          <option value="excel">Excel (.xlsx)</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cerrar-reportes" class="btn btn-ghost">Cerrar</button>
+        <button type="submit" class="btn btn-primary" id="btn-generar-reporte">Generar y descargar</button>
       </div>
     </form>
   </div>
