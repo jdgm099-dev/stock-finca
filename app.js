@@ -87,7 +87,7 @@ let profileId = localStorage.getItem(PROFILE_KEY);
 // `state` sigue siendo el objeto en memoria que usa toda la interfaz.
 // Ahora se llena a partir de lo que llega de Firestore (ver sección 2),
 // no de localStorage directamente.
-let state = { products: [], movements: [], animals: [], animalMovements: [] };
+let state = { products: [], movements: [], animals: [], animalMovements: [], weighings: [] };
 
 function referenciaProductos() {
   return collection(db, "profiles", profileId, "products");
@@ -100,6 +100,9 @@ function referenciaAnimales() {
 }
 function referenciaMovimientosAnimales() {
   return collection(db, "profiles", profileId, "animalMovements");
+}
+function referenciaPesajes() {
+  return collection(db, "profiles", profileId, "animalWeighings");
 }
 
 function generarId() {
@@ -163,6 +166,13 @@ function suscribirseAFirestore() {
     renderizarTodo();
   }, (error) => {
     console.error("Error escuchando movimientos de animales:", error);
+  });
+
+  onSnapshot(referenciaPesajes(), (snapshot) => {
+    state.weighings = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando pesajes:", error);
   });
 }
 
@@ -255,6 +265,53 @@ function diasHastaAgotamiento(producto) {
 function estaPorAgotarse(producto) {
   const dias = diasHastaAgotamiento(producto);
   return dias !== null && dias <= DIAS_ALERTA_AGOTAMIENTO;
+}
+
+/* ---------------------------------------------------------------------
+   PESAJES Y GANANCIA DE PESO
+   -----------------------------------------------------------------------
+   Dato productivo/zootécnico, no comercial: solo kilos y tiempo, nada de
+   precios. Con 2 o más pesajes de un animal se puede calcular cuánto ganó
+   entre el primero y el último, y un promedio de kg/día.
+   ------------------------------------------------------------------- */
+
+const DIAS_ALERTA_SIN_PESAR = 45; // aviso si un animal activo no se pesa hace más de esto
+
+function pesajesDelAnimal(animalId) {
+  return state.weighings
+    .filter((p) => p.animalId === animalId)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+function gananciaDePeso(animalId) {
+  const pesajes = pesajesDelAnimal(animalId);
+  if (pesajes.length < 2) return null;
+
+  const primero = pesajes[0];
+  const ultimo = pesajes[pesajes.length - 1];
+  const gananciaTotal = ultimo.peso - primero.peso;
+  const diasTranscurridos = Math.max(
+    1,
+    (new Date(ultimo.fecha) - new Date(primero.fecha)) / (1000 * 60 * 60 * 24)
+  );
+  return {
+    gananciaTotal: round2(gananciaTotal),
+    gananciaDiaria: round2(gananciaTotal / diasTranscurridos),
+    dias: Math.round(diasTranscurridos),
+  };
+}
+
+function diasSinPesar(animal) {
+  const pesajes = pesajesDelAnimal(animal.id);
+  if (pesajes.length === 0) return null;
+  const ultimo = pesajes[pesajes.length - 1];
+  return Math.round((new Date() - new Date(ultimo.fecha)) / (1000 * 60 * 60 * 24));
+}
+
+function haceMuchoQueNoSePesa(animal) {
+  if (animal.estado !== "Activo") return false;
+  const dias = diasSinPesar(animal);
+  return dias !== null && dias >= DIAS_ALERTA_SIN_PESAR;
 }
 
 function mostrarToast(mensaje) {
@@ -592,13 +649,15 @@ function renderizarGanado() {
 
 function crearFilaAnimal(a) {
   const row = document.createElement("div");
-  row.className = "item-row" + (a.estado !== "Activo" ? " low" : "");
+  const sinPesar = haceMuchoQueNoSePesa(a);
+  row.className = "item-row" + (a.estado !== "Activo" || sinPesar ? " low" : "");
 
   const info = document.createElement("div");
   info.className = "item-info";
   let metaHTML = `${escapeHTML(a.categoria)} · ${escapeHTML(a.sexo)}`;
   let metaClass = "item-meta";
   if (a.estado !== "Activo") { metaHTML += ` · ${escapeHTML(a.estado)}`; metaClass += " warn"; }
+  if (sinPesar) { metaHTML += ` · sin pesar hace ${diasSinPesar(a)} días`; metaClass += " warn"; }
   info.innerHTML = `<span class="item-name">Caravana ${escapeHTML(a.caravana)}</span><span class="${metaClass}">${metaHTML}</span>`;
   info.addEventListener("click", () => abrirModalAnimal(a.id));
 
@@ -717,6 +776,14 @@ formProducto.addEventListener("submit", (e) => {
 
   if (!datos.name) return;
 
+  // Aviso suave (no bloquea) ante una cantidad llamativamente alta: suele
+  // ser un cero de más al tipear, no un error grave, así que se avisa y se
+  // deja seguir si la persona confirma que es correcto.
+  const CANTIDAD_SOSPECHOSA = 100000;
+  if (datos.quantity >= CANTIDAD_SOSPECHOSA) {
+    if (!confirm(`Cargaste ${datos.quantity} ${datos.unit}. ¿Es correcto? (revisá que no sobre un cero)`)) return;
+  }
+
   if (productoEnEdicion) {
     setDoc(doc(referenciaProductos(), productoEnEdicion), datos, { merge: true })
       .catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
@@ -762,6 +829,7 @@ function abrirModalNuevoAnimal() {
   document.getElementById("a-acciones-historial").hidden = true;
   document.getElementById("a-categoria").disabled = false;
   document.getElementById("a-categoria-nota").hidden = true;
+  document.getElementById("a-pesajes-seccion").hidden = true;
   formAnimal.reset();
   document.getElementById("a-fecha-ingreso").value = new Date().toISOString().slice(0, 10);
   // La lista de categorías depende del sexo elegido (por defecto, el
@@ -790,7 +858,35 @@ function abrirModalAnimal(id) {
   document.getElementById("a-estado").value = a.estado;
   document.getElementById("a-origen").value = a.origen;
   document.getElementById("a-fecha-ingreso").value = a.fechaIngreso || "";
+  document.getElementById("a-pesajes-seccion").hidden = false;
+  renderizarPesajesDelAnimal(a.id);
   modalAnimal.hidden = false;
+}
+
+function renderizarPesajesDelAnimal(animalId) {
+  const pesajes = pesajesDelAnimal(animalId);
+  const ul = document.getElementById("a-pesajes-list");
+  ul.innerHTML = "";
+  document.getElementById("a-pesajes-empty").hidden = pesajes.length > 0;
+
+  // Se muestran del más nuevo al más viejo, igual que el resto de los historiales.
+  [...pesajes].reverse().forEach((p) => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <div class="mov-main">${p.peso} kg${p.nota ? ` <span class="item-meta">${escapeHTML(p.nota)}</span>` : ""}</div>
+      <div class="mov-date">${formatearFecha(p.fecha)}</div>
+    `;
+    ul.appendChild(li);
+  });
+
+  const ganancia = gananciaDePeso(animalId);
+  const resumen = document.getElementById("a-pesajes-resumen");
+  if (ganancia) {
+    const signo = ganancia.gananciaTotal >= 0 ? "+" : "";
+    resumen.textContent = `${signo}${ganancia.gananciaTotal} kg en ${ganancia.dias} días (${signo}${ganancia.gananciaDiaria} kg/día promedio)`;
+  } else {
+    resumen.textContent = pesajes.length === 1 ? "Con un pesaje más se va a poder calcular la ganancia." : "";
+  }
 }
 
 // Si cambiás el sexo (solo pasa al cargar un animal nuevo, ya que al
@@ -821,6 +917,17 @@ formAnimal.addEventListener("submit", (e) => {
   };
 
   if (!datos.caravana) return;
+
+  // Aviso de caravana duplicada: solo contra animales Activos (si un animal
+  // ya salió, es normal que la caravana se reutilice en otro más adelante).
+  const duplicado = state.animals.find(
+    (x) => x.id !== animalEnEdicion && x.estado === "Activo" &&
+      x.caravana.trim().toLowerCase() === datos.caravana.toLowerCase()
+  );
+  if (duplicado) {
+    const seguro = confirm(`Ya hay un animal activo con la caravana "${duplicado.caravana}". ¿Guardar igual?`);
+    if (!seguro) return;
+  }
 
   if (animalEnEdicion) {
     setDoc(doc(referenciaAnimales(), animalEnEdicion), datos, { merge: true })
@@ -853,6 +960,9 @@ document.getElementById("btn-eliminar-animal").addEventListener("click", () => {
   state.animalMovements
     .filter((m) => m.animalId === animalEnEdicion)
     .forEach((m) => deleteDoc(doc(referenciaMovimientosAnimales(), m.id)).catch(console.error));
+  state.weighings
+    .filter((p) => p.animalId === animalEnEdicion)
+    .forEach((p) => deleteDoc(doc(referenciaPesajes(), p.id)).catch(console.error));
   cerrarModalAnimal();
   mostrarToast("Animal eliminado");
 });
@@ -955,6 +1065,49 @@ formEgresoAnimal.addEventListener("submit", (e) => {
 });
 
 /* =====================================================================
+   8.8) MODAL: registrar pesaje
+   ===================================================================== */
+
+const modalPesaje = document.getElementById("modal-pesaje");
+const formPesaje = document.getElementById("form-pesaje");
+
+document.getElementById("btn-agregar-pesaje").addEventListener("click", () => {
+  if (!animalEnEdicion) return;
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  document.getElementById("pesaje-subtitulo").textContent = `Caravana ${a.caravana}`;
+  formPesaje.reset();
+  document.getElementById("ps-fecha").value = new Date().toISOString().slice(0, 10);
+  modalAnimal.hidden = true;
+  modalPesaje.hidden = false;
+  setTimeout(() => document.getElementById("ps-peso").focus(), 50);
+});
+
+document.getElementById("btn-cancelar-pesaje").addEventListener("click", () => {
+  modalPesaje.hidden = true;
+  modalAnimal.hidden = false;
+});
+
+formPesaje.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!animalEnEdicion) return;
+  const peso = Number(document.getElementById("ps-peso").value);
+  if (!peso || peso <= 0) return;
+
+  setDoc(doc(referenciaPesajes(), generarId()), {
+    animalId: animalEnEdicion,
+    peso,
+    fecha: document.getElementById("ps-fecha").value,
+    nota: document.getElementById("ps-nota").value.trim() || null,
+  }).catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+
+  modalPesaje.hidden = true;
+  modalAnimal.hidden = false;
+  renderizarPesajesDelAnimal(animalEnEdicion);
+  mostrarToast("Pesaje registrado");
+});
+
+/* =====================================================================
    9) MODAL: registrar movimiento (entrada / salida)
    ===================================================================== */
 
@@ -993,6 +1146,10 @@ formMov.addEventListener("submit", (e) => {
 
   if (movEnCurso.tipo === "salida" && cantidad > p.quantity) {
     if (!confirm(`Solo quedan ${p.quantity} ${p.unit}. ¿Registrar igual y dejar el stock en 0?`)) return;
+  }
+
+  if (cantidad >= 100000) {
+    if (!confirm(`Cargaste ${cantidad} ${p.unit}. ¿Es correcto? (revisá que no sobre un cero)`)) return;
   }
 
   const nuevaCantidad = movEnCurso.tipo === "entrada"
@@ -1050,18 +1207,29 @@ document.getElementById("input-importar").addEventListener("change", (e) => {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!Array.isArray(data.products) || !Array.isArray(data.movements)) {
-        throw new Error("Formato inválido");
-      }
-      if (!confirm("Esto va a agregar los productos y movimientos de la copia a los datos actuales de esta finca. ¿Continuar?")) return;
-      data.products.forEach((p) => {
-        const { id, ...datos } = p;
-        setDoc(doc(referenciaProductos(), id || generarId()), datos).catch(console.error);
+      // Todas las colecciones son opcionales dentro del archivo: una copia
+      // vieja (de antes de que existiera Ganado) solo va a tener products/
+      // movements, y eso también tiene que poder restaurarse sin error.
+      const colecciones = [
+        { datos: data.products, ref: referenciaProductos },
+        { datos: data.movements, ref: referenciaMovimientos },
+        { datos: data.animals, ref: referenciaAnimales },
+        { datos: data.animalMovements, ref: referenciaMovimientosAnimales },
+        { datos: data.weighings, ref: referenciaPesajes },
+      ];
+      const hayAlgunaColeccionValida = colecciones.some((c) => Array.isArray(c.datos));
+      if (!hayAlgunaColeccionValida) throw new Error("Formato inválido");
+
+      if (!confirm("Esto va a agregar los datos de la copia (productos, movimientos, animales y pesajes) a los datos actuales de esta finca. ¿Continuar?")) return;
+
+      colecciones.forEach(({ datos, ref }) => {
+        if (!Array.isArray(datos)) return;
+        datos.forEach((item) => {
+          const { id, ...campos } = item;
+          setDoc(doc(ref(), id || generarId()), campos).catch(console.error);
+        });
       });
-      data.movements.forEach((m) => {
-        const { id, ...datos } = m;
-        setDoc(doc(referenciaMovimientos(), id || generarId()), datos).catch(console.error);
-      });
+
       modalBackup.hidden = true;
       mostrarToast("Datos restaurados");
     } catch (err) {
