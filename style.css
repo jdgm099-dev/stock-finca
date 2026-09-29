@@ -63,6 +63,7 @@ h1, h2, .tab-mark {
   text-align: center;
 }
 .app-header .icon-btn[hidden] { display: inline-flex; visibility: hidden; } /* mantiene el título centrado aunque falte un botón */
+.header-acciones { display: flex; gap: 8px; }
 
 .app-header h1 {
   font-size: 1.6rem;
@@ -388,6 +389,7 @@ form input:focus, form select:focus {
 .btn-primary:active { background: var(--olive-dark); }
 .btn-ghost { background: none; border-color: var(--paper-line); color: var(--ink); }
 .btn-danger { background: var(--alert-bg); border-color: var(--alert); color: var(--alert); flex: 1 0 100%; }
+.btn-full { width: 100%; margin: 4px 0 14px; }
 .file-btn { display: flex; align-items: center; justify-content: center; }
 
 /* ===================== TOAST ===================== */
