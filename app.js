@@ -364,6 +364,7 @@ function irALanding() {
   seccionActual = "landing";
   document.getElementById("header-titulo").textContent = TITULOS.landing;
   document.getElementById("btn-volver").hidden = true;
+  document.getElementById("btn-reportes").hidden = true;
   document.getElementById("tabs-stock").hidden = true;
   document.getElementById("tabs-ganado").hidden = true;
   mostrarVista("landing");
@@ -375,6 +376,7 @@ function entrarASeccion(seccion) {
   seccionActual = seccion;
   document.getElementById("header-titulo").textContent = TITULOS[seccion];
   document.getElementById("btn-volver").hidden = false;
+  document.getElementById("btn-reportes").hidden = false;
 
   if (seccion === "stock") {
     document.getElementById("tabs-ganado").hidden = true;
@@ -472,7 +474,6 @@ function renderizarInicio() {
   document.getElementById("stat-productos").textContent = state.products.length;
   document.getElementById("stat-bajos").textContent = bajos.length;
   document.getElementById("stat-vencer").textContent = porVencer.length;
-  document.getElementById("stat-animales").textContent = state.animals.filter((a) => a.estado === "Activo").length;
 
   const ultimos = [...state.movements].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const ul = document.getElementById("ultimos-movs");
@@ -620,6 +621,10 @@ function renderizarFiltroLotes() {
 }
 
 function renderizarGanado() {
+  const activos = state.animals.filter((a) => a.estado === "Activo").length;
+  document.getElementById("ganado-resumen").textContent =
+    `${activos} animal${activos === 1 ? "" : "es"} activo${activos === 1 ? "" : "s"} · ${state.animals.length} en el registro`;
+
   renderizarFiltroLotes();
   const cont = document.getElementById("ganado-list");
   cont.innerHTML = "";
@@ -1238,6 +1243,150 @@ document.getElementById("input-importar").addEventListener("change", (e) => {
   };
   reader.readAsText(file);
   e.target.value = "";
+});
+
+/* =====================================================================
+   10.5) REPORTES (PDF / Excel)
+   -----------------------------------------------------------------------
+   Las librerías (jsPDF + jsPDF-AutoTable, y SheetJS para Excel) se cargan
+   recién la primera vez que se genera un reporte, no al abrir la app, para
+   no hacerla más pesada de arranque. Son gratuitas y de código abierto, y
+   corren enteramente en el navegador: los datos no se mandan a ningún
+   servidor, el archivo se arma en el propio celular/computadora.
+   ------------------------------------------------------------------- */
+
+let librosReporteCargados = false;
+
+function cargarScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("No se pudo cargar " + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function asegurarLibreriasReporte() {
+  if (librosReporteCargados) return;
+  await Promise.all([
+    cargarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.1.0/jspdf.umd.min.js"),
+    cargarScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"),
+  ]);
+  // El plugin de tablas necesita que jsPDF ya esté cargado antes.
+  await cargarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/5.0.2/jspdf.plugin.autotable.min.js");
+  librosReporteCargados = true;
+}
+
+function nombreDeArchivo(texto) {
+  return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function obtenerDatosReporte(seccion, tipo) {
+  if (seccion === "stock" && tipo === "actual") {
+    const columnas = ["Producto", "Categoría", "Cantidad", "Unidad", "Mínimo", "Vencimiento", "Alerta"];
+    const filas = [...state.products].sort((a, b) => a.name.localeCompare(b.name, "es")).map((p) => {
+      const alertas = [];
+      if (estaStockBajo(p)) alertas.push("Stock bajo");
+      if (estaPorVencer(p)) alertas.push("Por vencer");
+      if (estaPorAgotarse(p) && !estaStockBajo(p)) alertas.push("Se agotaría pronto");
+      return [p.name, p.category, p.quantity, p.unit, p.minStock ?? "-", p.expirationDate ? formatearFecha(p.expirationDate) : "-", alertas.join(", ") || "-"];
+    });
+    return { titulo: "Libreta de Stock — Estado actual", columnas, filas };
+  }
+
+  if (seccion === "stock" && tipo === "historial") {
+    const columnas = ["Fecha", "Tipo", "Producto", "Cantidad", "Unidad", "Nota"];
+    const filas = [...state.movements].sort((a, b) => b.date.localeCompare(a.date)).map((m) => {
+      const p = state.products.find((x) => x.id === m.productId);
+      return [formatearFechaHora(m.date), m.type === "entrada" ? "Entrada" : "Salida", p ? p.name : "(eliminado)", m.quantity, p ? p.unit : "-", m.note || "-"];
+    });
+    return { titulo: "Libreta de Stock — Historial de movimientos", columnas, filas };
+  }
+
+  if (seccion === "ganado" && tipo === "actual") {
+    const columnas = ["Caravana", "Categoría", "Sexo", "Lote", "Estado", "Fecha de ingreso"];
+    const filas = [...state.animals].sort((a, b) => a.caravana.localeCompare(b.caravana, "es", { numeric: true })).map((a) => [
+      a.caravana, a.categoria, a.sexo, a.lote || "Sin lote", a.estado, a.fechaIngreso ? formatearFecha(a.fechaIngreso) : "-",
+    ]);
+    return { titulo: "Ganado — Estado actual", columnas, filas };
+  }
+
+  // ganado + historial
+  const columnas = ["Fecha", "Tipo", "Caravana", "Detalle", "Nota"];
+  const filas = [...state.animalMovements].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((m) => {
+    const a = state.animals.find((x) => x.id === m.animalId);
+    let detalle = m.motivo || "-";
+    if (m.tipo === "recategorizacion") detalle = `${m.categoriaAnterior} → ${m.categoriaNueva}`;
+    if (m.tipo === "egreso" && m.guiaSenacsa) detalle += ` (Guía SENACSA ${m.guiaSenacsa})`;
+    return [formatearFecha(m.fecha), ETIQUETA_TIPO_MOV_ANIMAL[m.tipo], a ? a.caravana : "(eliminado)", detalle, m.nota || "-"];
+  });
+  return { titulo: "Ganado — Historial de movimientos", columnas, filas };
+}
+
+function generarPDF({ titulo, columnas, filas }) {
+  const { jsPDF } = window.jspdf;
+  const docPDF = new jsPDF({ orientation: "landscape" });
+  docPDF.setFontSize(14);
+  docPDF.text(titulo, 14, 15);
+  docPDF.setFontSize(9);
+  docPDF.setTextColor(100);
+  docPDF.text(`Finca: ${profileId} — Generado el ${formatearFecha(new Date().toISOString())}`, 14, 21);
+  docPDF.autoTable({
+    head: [columnas],
+    body: filas,
+    startY: 26,
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [91, 107, 63] }, // verde oliva, el mismo color de la app
+  });
+  docPDF.save(`${nombreDeArchivo(titulo)}.pdf`);
+}
+
+function generarExcel({ titulo, columnas, filas }) {
+  const encabezado = [[titulo], [`Finca: ${profileId} — Generado el ${formatearFecha(new Date().toISOString())}`], [], columnas];
+  const hoja = XLSX.utils.aoa_to_sheet([...encabezado, ...filas]);
+  hoja["!cols"] = columnas.map(() => ({ wch: 18 }));
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, "Reporte");
+  XLSX.writeFile(libro, `${nombreDeArchivo(titulo)}.xlsx`);
+}
+
+const modalReportes = document.getElementById("modal-reportes");
+
+document.getElementById("btn-reportes").addEventListener("click", () => {
+  document.getElementById("modal-reportes-titulo").textContent =
+    seccionActual === "ganado" ? "Reportes de Ganado" : "Reportes de Stock";
+  modalReportes.hidden = false;
+});
+document.getElementById("btn-cerrar-reportes").addEventListener("click", () => { modalReportes.hidden = true; });
+
+document.getElementById("form-reportes").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const tipo = document.getElementById("rep-tipo").value;
+  const formato = document.getElementById("rep-formato").value;
+  const seccion = seccionActual === "ganado" ? "ganado" : "stock";
+  const btn = document.getElementById("btn-generar-reporte");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generando…";
+  try {
+    await asegurarLibreriasReporte();
+    const datos = obtenerDatosReporte(seccion, tipo);
+    if (datos.filas.length === 0) {
+      mostrarToast("Todavía no hay datos para ese reporte");
+      return;
+    }
+    if (formato === "pdf") generarPDF(datos); else generarExcel(datos);
+    modalReportes.hidden = true;
+    mostrarToast("Reporte descargado");
+  } catch (err) {
+    console.error(err);
+    mostrarToast("No se pudo generar el reporte (hace falta internet la primera vez que se usa)");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
 });
 
 /* =====================================================================
