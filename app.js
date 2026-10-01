@@ -47,13 +47,16 @@ const DIAS_ALERTA_VENCIMIENTO = 7; // avisar si vence dentro de esta cantidad de
 const CATEGORIAS = ["Alimentos", "Limpieza", "Insumos", "Otros"];
 const PROFILE_KEY = "libretaStock:profileId";
 
-// Categorías estándar de bovinos (el "caminito" que sigue cada animal).
-// Dependen del sexo: una hembra nunca pasa a Toro, un macho nunca pasa a
-// Vaca. Se cambian con "Recategorizar", no editando el animal directamente,
-// para que quede guardado el historial de cuándo pasó de una a otra.
+// Categorías estándar de bovinos (el "caminito" que sigue cada animal),
+// usando el vocabulario que SENACSA realmente usa en Paraguay (confirmado
+// en sus propios comunicados de vacunación: "terneros, desmamantes machos
+// y hembras"), no el de otros países de la región. Dependen del sexo: una
+// hembra nunca pasa a Toro, un macho nunca pasa a Vaca. Se cambian con
+// "Recategorizar", no editando el animal directamente, para que quede
+// guardado el historial de cuándo pasó de una a otra.
 const CATEGORIAS_POR_SEXO = {
-  Hembra: ["Ternero/a", "Vaquillona", "Vaca", "Vaca de descarte"],
-  Macho: ["Ternero/a", "Torito", "Novillito", "Novillo", "Toro"],
+  Hembra: ["Ternera", "Desmamante Hembra", "Vaquillona", "Vaca", "Vaca de descarte"],
+  Macho: ["Ternero", "Desmamante Macho", "Novillo", "Toro"],
 };
 const CATEGORIAS_GANADO = [...new Set([...CATEGORIAS_POR_SEXO.Hembra, ...CATEGORIAS_POR_SEXO.Macho])];
 
@@ -1361,6 +1364,45 @@ document.getElementById("btn-reportes").addEventListener("click", () => {
 });
 document.getElementById("btn-cerrar-reportes").addEventListener("click", () => { modalReportes.hidden = true; });
 
+function generarResumenWhatsApp() {
+  const fecha = formatearFecha(new Date().toISOString());
+  if (seccionActual === "ganado") {
+    const activos = state.animals.filter((a) => a.estado === "Activo");
+    const porCategoria = {};
+    activos.forEach((a) => { porCategoria[a.categoria] = (porCategoria[a.categoria] || 0) + 1; });
+    const sinPesar = activos.filter(haceMuchoQueNoSePesa);
+    let texto = `🐄 *Ganado — ${profileId}* (${fecha})\n\n`;
+    texto += `Total activos: ${activos.length}\n`;
+    Object.entries(porCategoria).forEach(([cat, n]) => { texto += `• ${cat}: ${n}\n`; });
+    if (sinPesar.length) {
+      texto += `\n⚠️ Sin pesar hace tiempo:\n`;
+      sinPesar.forEach((a) => { texto += `• Caravana ${a.caravana} (${diasSinPesar(a)} días)\n`; });
+    }
+    return texto;
+  }
+
+  const bajos = state.products.filter(estaStockBajo);
+  const porVencer = state.products.filter(estaPorVencer);
+  let texto = `📦 *Libreta de Stock — ${profileId}* (${fecha})\n\n`;
+  texto += `Total de productos: ${state.products.length}\n`;
+  if (bajos.length) {
+    texto += `\n⚠️ Stock bajo:\n`;
+    bajos.forEach((p) => { texto += `• ${p.name}: quedan ${p.quantity} ${p.unit}\n`; });
+  }
+  if (porVencer.length) {
+    texto += `\n⚠️ Por vencer:\n`;
+    porVencer.forEach((p) => { texto += `• ${p.name}: ${formatearFecha(p.expirationDate)}\n`; });
+  }
+  if (!bajos.length && !porVencer.length) texto += `\nSin alertas pendientes. ✅\n`;
+  return texto;
+}
+
+document.getElementById("btn-whatsapp-resumen").addEventListener("click", () => {
+  const texto = generarResumenWhatsApp();
+  const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  window.open(url, "_blank");
+});
+
 document.getElementById("form-reportes").addEventListener("submit", async (e) => {
   e.preventDefault();
   const tipo = document.getElementById("rep-tipo").value;
@@ -1388,6 +1430,33 @@ document.getElementById("form-reportes").addEventListener("submit", async (e) =>
     btn.textContent = textoOriginal;
   }
 });
+
+/* =====================================================================
+   10.6) INDICADOR DE CONEXIÓN
+   -----------------------------------------------------------------------
+   En el campo la señal va y viene, así que conviene que la persona sepa en
+   todo momento si lo que carga se está guardando solo en el celular (sin
+   señal) o si ya se sincronizó. No depende de ningún servicio pago: usa
+   los eventos "online"/"offline" que trae el navegador.
+   ------------------------------------------------------------------- */
+
+function actualizarIndicadorConexion(estado) {
+  const el = document.getElementById("indicador-conexion");
+  const config = {
+    online: { icono: "🟢", texto: "En línea — los datos se sincronizan solos" },
+    offline: { icono: "🟠", texto: "Modo campo (sin señal) — se está guardando en este celular" },
+    sincronizando: { icono: "🔵", texto: "Sincronizando…" },
+  }[estado];
+  el.textContent = config.icono;
+  el.title = config.texto;
+}
+
+window.addEventListener("online", () => {
+  actualizarIndicadorConexion("sincronizando");
+  setTimeout(() => actualizarIndicadorConexion("online"), 2500);
+});
+window.addEventListener("offline", () => actualizarIndicadorConexion("offline"));
+actualizarIndicadorConexion(navigator.onLine ? "online" : "offline");
 
 /* =====================================================================
    11) INSTALAR COMO APP (PWA) Y SERVICE WORKER
