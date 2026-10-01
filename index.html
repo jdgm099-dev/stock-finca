@@ -23,6 +23,7 @@
     <button id="btn-volver" class="icon-btn" title="Volver" aria-label="Volver" hidden>←</button>
     <h1 id="header-titulo">Mi Finca</h1>
     <div class="header-acciones">
+      <span id="indicador-conexion" class="conexion-badge" title="Estado de conexión">🟢</span>
       <button id="btn-reportes" class="icon-btn" title="Reportes" aria-label="Reportes" hidden>📄</button>
       <button id="btn-backup" class="icon-btn" title="Copia de seguridad" aria-label="Copia de seguridad">⇅</button>
     </div>
@@ -197,11 +198,12 @@
       <label id="a-categoria-wrap">
         Categoría
         <select id="a-categoria">
-          <option value="Ternero/a">Ternero/a</option>
-          <option value="Torito">Torito</option>
-          <option value="Novillito">Novillito</option>
+          <option value="Ternero">Ternero</option>
+          <option value="Desmamante Macho">Desmamante Macho</option>
           <option value="Novillo">Novillo</option>
           <option value="Toro">Toro</option>
+          <option value="Ternera">Ternera</option>
+          <option value="Desmamante Hembra">Desmamante Hembra</option>
           <option value="Vaquillona">Vaquillona</option>
           <option value="Vaca">Vaca</option>
           <option value="Vaca de descarte">Vaca de descarte</option>
@@ -229,6 +231,8 @@
             <option value="Activo">Activo</option>
             <option value="Venta">Venta</option>
             <option value="Muerte">Muerte</option>
+            <option value="Abigeato">Abigeato (robo)</option>
+            <option value="Consumo interno">Consumo interno</option>
           </select>
         </label>
         <label>
@@ -302,11 +306,12 @@
       <label>
         Nueva categoría
         <select id="rc-categoria">
-          <option value="Ternero/a">Ternero/a</option>
-          <option value="Torito">Torito</option>
-          <option value="Novillito">Novillito</option>
+          <option value="Ternero">Ternero</option>
+          <option value="Desmamante Macho">Desmamante Macho</option>
           <option value="Novillo">Novillo</option>
           <option value="Toro">Toro</option>
+          <option value="Ternera">Ternera</option>
+          <option value="Desmamante Hembra">Desmamante Hembra</option>
           <option value="Vaquillona">Vaquillona</option>
           <option value="Vaca">Vaca</option>
           <option value="Vaca de descarte">Vaca de descarte</option>
@@ -339,6 +344,8 @@
         <select id="eg-motivo">
           <option value="Venta">Venta</option>
           <option value="Muerte">Muerte</option>
+          <option value="Abigeato">Abigeato (robo)</option>
+          <option value="Consumo interno">Consumo interno</option>
         </select>
       </label>
       <label>
@@ -442,6 +449,7 @@
         <button type="submit" class="btn btn-primary" id="btn-generar-reporte">Generar y descargar</button>
       </div>
     </form>
+    <button type="button" id="btn-whatsapp-resumen" class="btn btn-ghost btn-full">💬 Enviar resumen por WhatsApp</button>
   </div>
 </div>
 
