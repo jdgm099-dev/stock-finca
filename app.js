@@ -60,6 +60,15 @@ const CATEGORIAS_POR_SEXO = {
 };
 const CATEGORIAS_GANADO = [...new Set([...CATEGORIAS_POR_SEXO.Hembra, ...CATEGORIAS_POR_SEXO.Macho])];
 
+// Rellena el <select> de "Detalle" según el tipo de evento sanitario
+// elegido (Vacunación o Tratamiento), igual que ya hacemos con las
+// categorías según el sexo del animal.
+function poblarSelectDetalleSanidad(select, tipo, valorActual) {
+  const opciones = DETALLE_SANIDAD_POR_TIPO[tipo] || [];
+  select.innerHTML = opciones.map((o) => `<option value="${escapeHTML(o)}">${escapeHTML(o)}</option>`).join("");
+  if (valorActual && opciones.includes(valorActual)) select.value = valorActual;
+}
+
 // Rellena un <select> con las categorías que corresponden a un sexo. Si el
 // animal ya tenía cargada una categoría que no está en esa lista (por
 // ejemplo, datos cargados antes de este cambio), se agrega igual al
@@ -90,7 +99,7 @@ let profileId = localStorage.getItem(PROFILE_KEY);
 // `state` sigue siendo el objeto en memoria que usa toda la interfaz.
 // Ahora se llena a partir de lo que llega de Firestore (ver sección 2),
 // no de localStorage directamente.
-let state = { products: [], movements: [], animals: [], animalMovements: [], weighings: [] };
+let state = { products: [], movements: [], animals: [], animalMovements: [], weighings: [], healthEvents: [] };
 
 function referenciaProductos() {
   return collection(db, "profiles", profileId, "products");
@@ -106,6 +115,9 @@ function referenciaMovimientosAnimales() {
 }
 function referenciaPesajes() {
   return collection(db, "profiles", profileId, "animalWeighings");
+}
+function referenciaSanidad() {
+  return collection(db, "profiles", profileId, "animalHealthEvents");
 }
 
 function generarId() {
@@ -176,6 +188,13 @@ function suscribirseAFirestore() {
     renderizarTodo();
   }, (error) => {
     console.error("Error escuchando pesajes:", error);
+  });
+
+  onSnapshot(referenciaSanidad(), (snapshot) => {
+    state.healthEvents = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarTodo();
+  }, (error) => {
+    console.error("Error escuchando eventos sanitarios:", error);
   });
 }
 
@@ -280,6 +299,25 @@ function estaPorAgotarse(producto) {
 
 const DIAS_ALERTA_SIN_PESAR = 45; // aviso si un animal activo no se pesa hace más de esto
 
+// Rangos de peso esperables por categoría (kg), para avisar si alguien
+// carga, por ejemplo, 200 kg para un Ternero (seguramente un error de
+// tipeo, no un dato real). Son rangos amplios a propósito: la idea es
+// atrapar errores groseros, no limitar casos legítimos poco comunes.
+const RANGO_PESO_POR_CATEGORIA = {
+  "Ternero": [15, 220], "Ternera": [15, 220],
+  "Desmamante Macho": [120, 320], "Desmamante Hembra": [120, 320],
+  "Vaquillona": [220, 480],
+  "Novillo": [280, 600],
+  "Vaca": [320, 700], "Vaca de descarte": [280, 700],
+  "Toro": [450, 1100],
+};
+
+// Ganancia media diaria (GMD) considerada realista para un bovino. Fuera
+// de este rango, lo más probable es que se haya tipeado mal el peso o la
+// fecha de alguno de los dos pesajes comparados.
+const GMD_MAXIMA_REALISTA = 2.5;   // kg/día ganando
+const GMD_MINIMA_REALISTA = -1.5;  // kg/día perdiendo (puede pasar por sequía, enfermedad, etc.)
+
 function pesajesDelAnimal(animalId) {
   return state.weighings
     .filter((p) => p.animalId === animalId)
@@ -315,6 +353,52 @@ function haceMuchoQueNoSePesa(animal) {
   if (animal.estado !== "Activo") return false;
   const dias = diasSinPesar(animal);
   return dias !== null && dias >= DIAS_ALERTA_SIN_PESAR;
+}
+
+/* ---------------------------------------------------------------------
+   SANIDAD (vacunación / antiparasitario / tratamientos)
+   -----------------------------------------------------------------------
+   Registro simple de eventos sanitarios por animal. La Reproducción
+   (preñez, servicio, partos) queda deliberadamente afuera por ahora: es un
+   módulo en sí mismo, documentado como trabajo futuro en la tesis.
+   ------------------------------------------------------------------- */
+
+const DETALLE_SANIDAD_POR_TIPO = {
+  "Vacunación": ["Aftosa", "Carbunco", "Brucelosis", "Ivermectina (antiparasitario)", "Baño (garrapaticida)", "Otro"],
+  "Tratamiento": ["Tristeza bovina", "Mastitis", "Miasis (bichera)", "Neumonía", "Otro"],
+};
+
+const DIAS_ALERTA_VACUNA = 7; // avisar si hay una próxima dosis/control agendado dentro de este plazo
+
+function eventosSanitariosDelAnimal(animalId) {
+  return state.healthEvents
+    .filter((e) => e.animalId === animalId)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+// Devuelve el evento sanitario más reciente que tenga una "próxima
+// fecha" cargada. Si después se registra un evento más nuevo para ese
+// mismo animal (la dosis siguiente), ese pasa a ser el más reciente y
+// reemplaza la alerta anterior automáticamente, sin tener que "cerrar"
+// nada a mano. Importante: una fecha ya vencida (pasada) SÍ debe seguir
+// contando como pendiente -una dosis atrasada es más urgente, no menos-,
+// así que acá no se descarta por estar en el pasado.
+function proximaDosisDelAnimal(animal) {
+  const eventos = eventosSanitariosDelAnimal(animal.id); // ordenados por fecha, de más viejo a más nuevo
+  if (eventos.length === 0) return null;
+  const ultimo = eventos[eventos.length - 1];
+  // Solo cuenta la próxima fecha del evento MÁS RECIENTE: si ese último
+  // evento no cargó una, se interpreta como que no hay nada pendiente
+  // (por ejemplo, se "cerró" un control anterior), sin revivir avisos
+  // viejos de eventos más antiguos.
+  return ultimo.proximaFecha ? ultimo : null;
+}
+
+function tieneDosisProxima(animal) {
+  if (animal.estado !== "Activo") return false;
+  const proxima = proximaDosisDelAnimal(animal);
+  if (!proxima) return false;
+  return diasHasta(proxima.proximaFecha) <= DIAS_ALERTA_VACUNA;
 }
 
 function mostrarToast(mensaje) {
@@ -658,7 +742,8 @@ function renderizarGanado() {
 function crearFilaAnimal(a) {
   const row = document.createElement("div");
   const sinPesar = haceMuchoQueNoSePesa(a);
-  row.className = "item-row" + (a.estado !== "Activo" || sinPesar ? " low" : "");
+  const dosisProxima = tieneDosisProxima(a);
+  row.className = "item-row" + (a.estado !== "Activo" || sinPesar || dosisProxima ? " low" : "");
 
   const info = document.createElement("div");
   info.className = "item-info";
@@ -666,6 +751,11 @@ function crearFilaAnimal(a) {
   let metaClass = "item-meta";
   if (a.estado !== "Activo") { metaHTML += ` · ${escapeHTML(a.estado)}`; metaClass += " warn"; }
   if (sinPesar) { metaHTML += ` · sin pesar hace ${diasSinPesar(a)} días`; metaClass += " warn"; }
+  if (dosisProxima) {
+    const proxima = proximaDosisDelAnimal(a);
+    metaHTML += ` · ${escapeHTML(proxima.detalle)} próximo`;
+    metaClass += " warn";
+  }
   info.innerHTML = `<span class="item-name">Caravana ${escapeHTML(a.caravana)}</span><span class="${metaClass}">${metaHTML}</span>`;
   info.addEventListener("click", () => abrirModalAnimal(a.id));
 
@@ -677,40 +767,87 @@ function crearFilaAnimal(a) {
    6.6) RENDER: MOVIMIENTOS DE GANADO (ingresos, egresos, recategorizaciones)
    ===================================================================== */
 
-const ETIQUETA_TIPO_MOV_ANIMAL = { ingreso: "Ingreso", egreso: "Egreso", recategorizacion: "Recateg." };
-const CLASE_TIPO_MOV_ANIMAL = { ingreso: "entrada", egreso: "salida", recategorizacion: "entrada" };
+const ETIQUETA_TIPO_MOV_ANIMAL = { ingreso: "Ingreso", egreso: "Egreso", recategorizacion: "Recateg.", pesaje: "Pesaje", sanidad: "Sanidad" };
+const CLASE_TIPO_MOV_ANIMAL = { ingreso: "entrada", egreso: "salida", recategorizacion: "entrada", pesaje: "entrada", sanidad: "entrada" };
 
-function renderizarGanadoMovimientos() {
-  const ul = document.getElementById("ganado-movimientos-list");
-  ul.innerHTML = "";
-  const lista = [...state.animalMovements].sort((a, b) => b.fecha.localeCompare(a.fecha));
-  document.getElementById("ganado-movimientos-empty").hidden = lista.length > 0;
-  lista.forEach((m) => ul.appendChild(crearFilaMovimientoAnimal(m)));
+/* ---------------------------------------------------------------------
+   HISTORIAL UNIFICADO DE GANADO
+   -----------------------------------------------------------------------
+   Hasta acá cada tipo de evento (ingreso/egreso/recategorización, pesajes,
+   sanidad) vivía en su propia colección y se mostraba por separado, así
+   que no había ninguna vista que juntara "todo lo que le pasó a este
+   animal" en una sola línea de tiempo. Estas funciones arman esa vista
+   única a partir de las 3 colecciones, sin duplicar ningún dato: cada
+   evento se "normaliza" a la misma forma ({ fecha, animalId, caravana,
+   tipo, etiqueta, texto, nota }) para poder mezclarlos y ordenarlos juntos.
+   ------------------------------------------------------------------- */
+
+function caravanaDe(animalId) {
+  const a = state.animals.find((x) => x.id === animalId);
+  return a ? a.caravana : null;
 }
 
-function crearFilaMovimientoAnimal(m) {
+function eventoDesdeMovimiento(m) {
+  let texto = m.motivo || "-";
+  if (m.tipo === "recategorizacion") texto = `${m.categoriaAnterior || "?"} → ${m.categoriaNueva || "?"}`;
+  if (m.tipo === "egreso" && m.guiaSenacsa) texto += ` (Guía SENACSA ${m.guiaSenacsa})`;
+  return { fecha: m.fecha, animalId: m.animalId, caravana: caravanaDe(m.animalId), tipo: m.tipo, texto, nota: m.nota };
+}
+
+function eventoDesdePesaje(p) {
+  return { fecha: p.fecha, animalId: p.animalId, caravana: caravanaDe(p.animalId), tipo: "pesaje", texto: `${p.peso} kg`, nota: p.nota };
+}
+
+function eventoDesdeSanidad(ev) {
+  let texto = `${ev.tipo}: ${ev.detalle}`;
+  if (ev.proximaFecha) texto += ` (próx. control: ${formatearFecha(ev.proximaFecha)})`;
+  return { fecha: ev.fecha, animalId: ev.animalId, caravana: caravanaDe(ev.animalId), tipo: "sanidad", texto, nota: ev.nota };
+}
+
+// Junta las 3 colecciones en una sola lista ordenada. Si se pasa animalId,
+// devuelve solo los eventos de ese animal (para la ficha individual); si
+// no, devuelve todo (para la pestaña Movimientos de Ganado).
+function historialGanado(animalId) {
+  let eventos = [
+    ...state.animalMovements.map(eventoDesdeMovimiento),
+    ...state.weighings.map(eventoDesdePesaje),
+    ...state.healthEvents.map(eventoDesdeSanidad),
+  ];
+  if (animalId) eventos = eventos.filter((e) => e.animalId === animalId);
+  return eventos.sort((a, b) => b.fecha.localeCompare(a.fecha)); // más nuevo primero
+}
+
+function crearFilaEventoGanado(e, { mostrarCaravana } = {}) {
   const li = document.createElement("li");
-  const animal = state.animals.find((a) => a.id === m.animalId);
-  const nombre = animal ? `Caravana ${animal.caravana}` : "(animal eliminado)";
-
-  let detalle = m.motivo || "";
-  if (m.tipo === "recategorizacion") {
-    detalle = `${escapeHTML(m.categoriaAnterior || "?")} → ${escapeHTML(m.categoriaNueva || "?")}`;
-  }
-  if (m.tipo === "egreso" && m.guiaSenacsa) {
-    detalle += ` · Guía SENACSA ${escapeHTML(m.guiaSenacsa)}`;
-  }
-
+  const nombre = mostrarCaravana ? `Caravana ${e.caravana ?? "?"} — ` : "";
   li.innerHTML = `
     <div class="mov-main">
-      <span class="mov-tag ${CLASE_TIPO_MOV_ANIMAL[m.tipo]}">${ETIQUETA_TIPO_MOV_ANIMAL[m.tipo]}</span>
-      <div>${escapeHTML(nombre)} — ${detalle}</div>
-      ${m.nota ? `<div class="item-meta">${escapeHTML(m.nota)}</div>` : ""}
+      <span class="mov-tag ${CLASE_TIPO_MOV_ANIMAL[e.tipo]}">${ETIQUETA_TIPO_MOV_ANIMAL[e.tipo]}</span>
+      <div>${nombre}${escapeHTML(e.texto)}</div>
+      ${e.nota ? `<div class="item-meta">${escapeHTML(e.nota)}</div>` : ""}
     </div>
-    <div class="mov-date">${formatearFecha(m.fecha)}</div>
+    <div class="mov-date">${formatearFecha(e.fecha)}</div>
   `;
   return li;
 }
+
+function renderizarGanadoMovimientos() {
+  const textoFiltro = document.getElementById("gm-filtro-caravana").value.trim().toLowerCase();
+  const tipoFiltro = document.getElementById("gm-filtro-tipo").value;
+
+  let eventos = historialGanado(); // de todos los animales
+
+  if (tipoFiltro !== "todos") eventos = eventos.filter((e) => e.tipo === tipoFiltro);
+  if (textoFiltro) eventos = eventos.filter((e) => (e.caravana || "").toLowerCase().includes(textoFiltro));
+
+  const ul = document.getElementById("ganado-movimientos-list");
+  ul.innerHTML = "";
+  document.getElementById("ganado-movimientos-empty").hidden = eventos.length > 0;
+  eventos.forEach((e) => ul.appendChild(crearFilaEventoGanado(e, { mostrarCaravana: true })));
+}
+
+document.getElementById("gm-filtro-caravana").addEventListener("input", renderizarGanadoMovimientos);
+document.getElementById("gm-filtro-tipo").addEventListener("change", renderizarGanadoMovimientos);
 
 /* =====================================================================
    7) RENDER GENERAL
@@ -837,7 +974,9 @@ function abrirModalNuevoAnimal() {
   document.getElementById("a-acciones-historial").hidden = true;
   document.getElementById("a-categoria").disabled = false;
   document.getElementById("a-categoria-nota").hidden = true;
-  document.getElementById("a-pesajes-seccion").hidden = true;
+  document.getElementById("a-resumen-seccion").hidden = true;
+  document.getElementById("a-registro-botones").hidden = true;
+  document.getElementById("a-historial-seccion").hidden = true;
   formAnimal.reset();
   document.getElementById("a-fecha-ingreso").value = new Date().toISOString().slice(0, 10);
   // La lista de categorías depende del sexo elegido (por defecto, el
@@ -866,35 +1005,65 @@ function abrirModalAnimal(id) {
   document.getElementById("a-estado").value = a.estado;
   document.getElementById("a-origen").value = a.origen;
   document.getElementById("a-fecha-ingreso").value = a.fechaIngreso || "";
-  document.getElementById("a-pesajes-seccion").hidden = false;
-  renderizarPesajesDelAnimal(a.id);
+  document.getElementById("a-resumen-seccion").hidden = false;
+  document.getElementById("a-registro-botones").hidden = false;
+  document.getElementById("a-historial-seccion").hidden = false;
+  renderizarHistorialAnimal(a.id);
   modalAnimal.hidden = false;
 }
 
-function renderizarPesajesDelAnimal(animalId) {
+// Estas dos funciones ya NO dibujan listas propias (eso ahora lo hace el
+// historial único de abajo) — solo calculan el renglón de resumen de cada
+// tema, que sigue siendo útil ver de un vistazo arriba de la ficha.
+
+function actualizarResumenSanidad(animalId) {
+  const animal = state.animals.find((x) => x.id === animalId);
+  const proxima = animal && proximaDosisDelAnimal(animal);
+  const resumen = document.getElementById("a-sanidad-resumen");
+  if (proxima) {
+    const dias = diasHasta(proxima.proximaFecha);
+    const texto = dias < 0 ? `⚠️ Control vencido: ${proxima.detalle}` : dias === 0 ? `Control hoy: ${proxima.detalle}` : `Próximo control: ${proxima.detalle} en ${dias} día(s)`;
+    resumen.textContent = texto;
+    resumen.classList.toggle("warn-text", dias <= DIAS_ALERTA_VACUNA);
+  } else {
+    resumen.textContent = "";
+    resumen.classList.remove("warn-text");
+  }
+}
+
+function actualizarResumenPesajes(animalId) {
   const pesajes = pesajesDelAnimal(animalId);
-  const ul = document.getElementById("a-pesajes-list");
-  ul.innerHTML = "";
-  document.getElementById("a-pesajes-empty").hidden = pesajes.length > 0;
-
-  // Se muestran del más nuevo al más viejo, igual que el resto de los historiales.
-  [...pesajes].reverse().forEach((p) => {
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <div class="mov-main">${p.peso} kg${p.nota ? ` <span class="item-meta">${escapeHTML(p.nota)}</span>` : ""}</div>
-      <div class="mov-date">${formatearFecha(p.fecha)}</div>
-    `;
-    ul.appendChild(li);
-  });
-
   const ganancia = gananciaDePeso(animalId);
   const resumen = document.getElementById("a-pesajes-resumen");
   if (ganancia) {
     const signo = ganancia.gananciaTotal >= 0 ? "+" : "";
-    resumen.textContent = `${signo}${ganancia.gananciaTotal} kg en ${ganancia.dias} días (${signo}${ganancia.gananciaDiaria} kg/día promedio)`;
+    let texto = `Peso: ${signo}${ganancia.gananciaTotal} kg en ${ganancia.dias} días (${signo}${ganancia.gananciaDiaria} kg/día)`;
+    const gmdIrreal = ganancia.gananciaDiaria > GMD_MAXIMA_REALISTA || ganancia.gananciaDiaria < GMD_MINIMA_REALISTA;
+    if (gmdIrreal) {
+      texto += " ⚠️ no parece realista, revisá los datos";
+      resumen.classList.add("warn-text");
+    } else {
+      resumen.classList.remove("warn-text");
+    }
+    resumen.textContent = texto;
   } else {
+    resumen.classList.remove("warn-text");
     resumen.textContent = pesajes.length === 1 ? "Con un pesaje más se va a poder calcular la ganancia." : "";
   }
+}
+
+// Esta es la lista única que junta ingresos, egresos, recategorizaciones,
+// pesajes y sanidad de UN animal en una sola línea de tiempo — responde
+// directamente "¿qué le pasó a este animal y cuándo?".
+function renderizarHistorialAnimal(animalId) {
+  actualizarResumenPesajes(animalId);
+  actualizarResumenSanidad(animalId);
+
+  const eventos = historialGanado(animalId);
+  const ul = document.getElementById("a-historial-list");
+  ul.innerHTML = "";
+  document.getElementById("a-historial-empty").hidden = eventos.length > 0;
+  eventos.forEach((e) => ul.appendChild(crearFilaEventoGanado(e)));
 }
 
 // Si cambiás el sexo (solo pasa al cargar un animal nuevo, ya que al
@@ -963,7 +1132,7 @@ formAnimal.addEventListener("submit", (e) => {
 
 document.getElementById("btn-eliminar-animal").addEventListener("click", () => {
   if (!animalEnEdicion) return;
-  if (!confirm("¿Eliminar este animal del registro? También se borrará su historial de ingresos/egresos/recategorizaciones.")) return;
+  if (!confirm("¿Eliminar este animal del registro? También se borrará su historial de ingresos/egresos/recategorizaciones, pesajes y eventos sanitarios.")) return;
   deleteDoc(doc(referenciaAnimales(), animalEnEdicion)).catch(console.error);
   state.animalMovements
     .filter((m) => m.animalId === animalEnEdicion)
@@ -971,6 +1140,9 @@ document.getElementById("btn-eliminar-animal").addEventListener("click", () => {
   state.weighings
     .filter((p) => p.animalId === animalEnEdicion)
     .forEach((p) => deleteDoc(doc(referenciaPesajes(), p.id)).catch(console.error));
+  state.healthEvents
+    .filter((ev) => ev.animalId === animalEnEdicion)
+    .forEach((ev) => deleteDoc(doc(referenciaSanidad(), ev.id)).catch(console.error));
   cerrarModalAnimal();
   mostrarToast("Animal eliminado");
 });
@@ -1073,6 +1245,68 @@ formEgresoAnimal.addEventListener("submit", (e) => {
 });
 
 /* =====================================================================
+   8.75) MODAL: registrar evento sanitario
+   ===================================================================== */
+
+const modalSanidad = document.getElementById("modal-sanidad");
+const formSanidad = document.getElementById("form-sanidad");
+
+function actualizarDetalleSanidad() {
+  const tipo = document.getElementById("sa-tipo").value;
+  poblarSelectDetalleSanidad(document.getElementById("sa-detalle"), tipo, null);
+  document.getElementById("sa-detalle-otro-wrap").hidden = true;
+}
+
+document.getElementById("sa-tipo").addEventListener("change", actualizarDetalleSanidad);
+
+document.getElementById("sa-detalle").addEventListener("change", (e) => {
+  document.getElementById("sa-detalle-otro-wrap").hidden = e.target.value !== "Otro";
+});
+
+document.getElementById("btn-agregar-sanidad").addEventListener("click", () => {
+  if (!animalEnEdicion) return;
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  if (!a) return;
+  document.getElementById("sanidad-subtitulo").textContent = `Caravana ${a.caravana}`;
+  formSanidad.reset();
+  document.getElementById("sa-tipo").value = "Vacunación";
+  actualizarDetalleSanidad();
+  document.getElementById("sa-fecha").value = new Date().toISOString().slice(0, 10);
+  modalAnimal.hidden = true;
+  modalSanidad.hidden = false;
+});
+
+document.getElementById("btn-cancelar-sanidad").addEventListener("click", () => {
+  modalSanidad.hidden = true;
+  modalAnimal.hidden = false;
+});
+
+formSanidad.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!animalEnEdicion) return;
+
+  const detalleSeleccionado = document.getElementById("sa-detalle").value;
+  const detalleFinal = detalleSeleccionado === "Otro"
+    ? document.getElementById("sa-detalle-otro").value.trim()
+    : detalleSeleccionado;
+  if (!detalleFinal) { mostrarToast("Falta especificar el detalle"); return; }
+
+  setDoc(doc(referenciaSanidad(), generarId()), {
+    animalId: animalEnEdicion,
+    tipo: document.getElementById("sa-tipo").value,
+    detalle: detalleFinal,
+    fecha: document.getElementById("sa-fecha").value,
+    proximaFecha: document.getElementById("sa-proxima").value || null,
+    nota: document.getElementById("sa-nota").value.trim() || null,
+  }).catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
+
+  modalSanidad.hidden = true;
+  modalAnimal.hidden = false;
+  renderizarHistorialAnimal(animalEnEdicion);
+  mostrarToast("Evento sanitario registrado");
+});
+
+/* =====================================================================
    8.8) MODAL: registrar pesaje
    ===================================================================== */
 
@@ -1102,6 +1336,15 @@ formPesaje.addEventListener("submit", (e) => {
   const peso = Number(document.getElementById("ps-peso").value);
   if (!peso || peso <= 0) return;
 
+  const a = state.animals.find((x) => x.id === animalEnEdicion);
+  const rango = a && RANGO_PESO_POR_CATEGORIA[a.categoria];
+  if (rango && (peso < rango[0] || peso > rango[1])) {
+    const seguro = confirm(
+      `Un(a) ${a.categoria} normalmente pesa entre ${rango[0]} y ${rango[1]} kg. Cargaste ${peso} kg. ¿Es correcto?`
+    );
+    if (!seguro) return;
+  }
+
   setDoc(doc(referenciaPesajes(), generarId()), {
     animalId: animalEnEdicion,
     peso,
@@ -1111,7 +1354,7 @@ formPesaje.addEventListener("submit", (e) => {
 
   modalPesaje.hidden = true;
   modalAnimal.hidden = false;
-  renderizarPesajesDelAnimal(animalEnEdicion);
+  renderizarHistorialAnimal(animalEnEdicion);
   mostrarToast("Pesaje registrado");
 });
 
