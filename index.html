@@ -96,8 +96,19 @@
   </main>
 
   <main id="view-ganado-movimientos" class="view" hidden>
+    <div class="field-row filtro-movimientos">
+      <input type="text" id="gm-filtro-caravana" placeholder="Buscar por caravana…" />
+      <select id="gm-filtro-tipo">
+        <option value="todos">Todos los eventos</option>
+        <option value="ingreso">Ingresos</option>
+        <option value="egreso">Egresos</option>
+        <option value="recategorizacion">Recategorizaciones</option>
+        <option value="pesaje">Pesajes</option>
+        <option value="sanidad">Sanidad</option>
+      </select>
+    </div>
     <ul id="ganado-movimientos-list" class="mov-list full"></ul>
-    <p id="ganado-movimientos-empty" class="empty-msg" hidden>Todavía no hay ingresos, egresos ni recategorizaciones registrados.</p>
+    <p id="ganado-movimientos-empty" class="empty-msg" hidden>No hay eventos que coincidan con el filtro.</p>
   </main>
 
   <!-- ===================== FAB (cambia según la pantalla activa) ===================== -->
@@ -254,17 +265,66 @@
         <button type="button" id="btn-egreso-animal" class="btn btn-ghost">↪ Registrar egreso</button>
       </div>
 
-      <div id="a-pesajes-seccion" hidden>
-        <h3 class="cat-group-title">Pesajes</h3>
+      <div id="a-resumen-seccion" hidden>
         <p id="a-pesajes-resumen" class="modal-subtitle"></p>
-        <ul id="a-pesajes-list" class="mov-list"></ul>
-        <p id="a-pesajes-empty" class="empty-msg" hidden>Todavía no tiene pesajes registrados.</p>
-        <button type="button" id="btn-agregar-pesaje" class="btn btn-ghost btn-full">⚖ Registrar pesaje</button>
+        <p id="a-sanidad-resumen" class="modal-subtitle"></p>
+      </div>
+
+      <div id="a-registro-botones" class="modal-actions" hidden>
+        <button type="button" id="btn-agregar-pesaje" class="btn btn-ghost">⚖ Pesaje</button>
+        <button type="button" id="btn-agregar-sanidad" class="btn btn-ghost">🩺 Sanidad</button>
+      </div>
+
+      <div id="a-historial-seccion" hidden>
+        <h3 class="cat-group-title">Historial completo</h3>
+        <ul id="a-historial-list" class="mov-list"></ul>
+        <p id="a-historial-empty" class="empty-msg" hidden>Todavía no hay eventos registrados para este animal.</p>
       </div>
 
       <div class="modal-actions">
         <button type="button" id="btn-eliminar-animal" class="btn btn-danger" hidden>Eliminar</button>
         <button type="button" id="btn-cancelar-animal" class="btn btn-ghost">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: registrar evento sanitario ===================== -->
+<div id="modal-sanidad" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-sanidad-titulo">
+    <h2 id="modal-sanidad-titulo">Registrar evento sanitario</h2>
+    <p id="sanidad-subtitulo" class="modal-subtitle"></p>
+    <form id="form-sanidad">
+      <label>
+        Tipo
+        <select id="sa-tipo">
+          <option value="Vacunación">Vacunación / Antiparasitario</option>
+          <option value="Tratamiento">Tratamiento (enfermedad)</option>
+        </select>
+      </label>
+      <label>
+        Detalle
+        <select id="sa-detalle"></select>
+      </label>
+      <label id="sa-detalle-otro-wrap" hidden>
+        Especificar
+        <input type="text" id="sa-detalle-otro" maxlength="60" />
+      </label>
+      <label>
+        Fecha de aplicación
+        <input type="date" id="sa-fecha" required />
+      </label>
+      <label>
+        Próxima dosis / control (opcional)
+        <input type="date" id="sa-proxima" />
+      </label>
+      <label>
+        Nota (opcional)
+        <input type="text" id="sa-nota" maxlength="80" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="btn-cancelar-sanidad" class="btn btn-ghost">Cancelar</button>
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
     </form>
