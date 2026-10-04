@@ -664,14 +664,19 @@ function crearFilaProducto(p) {
 function renderizarMovimientos() {
   const textoFiltro = document.getElementById("mv-filtro-producto").value.trim().toLowerCase();
   const tipoFiltro = document.getElementById("mv-filtro-tipo").value;
+  const categoriaFiltro = document.getElementById("mv-filtro-categoria").value;
 
   let lista = [...state.movements].sort((a, b) => b.date.localeCompare(a.date));
 
   if (tipoFiltro !== "todos") lista = lista.filter((m) => m.type === tipoFiltro);
-  if (textoFiltro) {
+
+  if (categoriaFiltro !== "todas" || textoFiltro) {
     lista = lista.filter((m) => {
       const p = state.products.find((x) => x.id === m.productId);
-      return p && p.name.toLowerCase().includes(textoFiltro);
+      if (!p) return false;
+      const pasaCategoria = categoriaFiltro === "todas" || p.category === categoriaFiltro;
+      const pasaTexto = !textoFiltro || p.name.toLowerCase().includes(textoFiltro);
+      return pasaCategoria && pasaTexto;
     });
   }
 
@@ -683,6 +688,7 @@ function renderizarMovimientos() {
 
 document.getElementById("mv-filtro-producto").addEventListener("input", renderizarMovimientos);
 document.getElementById("mv-filtro-tipo").addEventListener("change", renderizarMovimientos);
+document.getElementById("mv-filtro-categoria").addEventListener("change", renderizarMovimientos);
 
 function crearFilaMovimiento(m) {
   const li = document.createElement("li");
@@ -1433,8 +1439,10 @@ formMov.addEventListener("submit", (e) => {
     note: document.getElementById("mv-nota").value.trim() || null,
   }).catch((err) => { console.error(err); mostrarToast("No se pudo guardar (revisá tu conexión)"); });
 
+  const tipoRegistrado = movEnCurso.tipo; // guardamos esto ANTES de cerrar el modal,
+  // porque cerrarModalMovimiento() pone movEnCurso en null.
   cerrarModalMovimiento();
-  mostrarToast(movEnCurso.tipo === "entrada" ? "Entrada registrada" : "Salida registrada");
+  mostrarToast(tipoRegistrado === "entrada" ? "Entrada registrada" : "Salida registrada");
 });
 
 function round2(n) {
