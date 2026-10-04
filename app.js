@@ -56,7 +56,7 @@ const PROFILE_KEY = "libretaStock:profileId";
 // guardado el historial de cuándo pasó de una a otra.
 const CATEGORIAS_POR_SEXO = {
   Hembra: ["Ternera", "Desmamante Hembra", "Vaquillona", "Vaca", "Vaca de descarte"],
-  Macho: ["Ternero", "Desmamante Macho", "Novillo", "Toro"],
+  Macho: ["Ternero", "Desmamante Macho", "Novillo", "Toro", "Toro de descarte"],
 };
 const CATEGORIAS_GANADO = [...new Set([...CATEGORIAS_POR_SEXO.Hembra, ...CATEGORIAS_POR_SEXO.Macho])];
 
