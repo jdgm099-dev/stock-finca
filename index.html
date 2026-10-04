@@ -84,8 +84,16 @@
   </main>
 
   <main id="view-movimientos" class="view" hidden>
+    <div class="field-row filtro-movimientos">
+      <input type="text" id="mv-filtro-producto" placeholder="Buscar por producto…" />
+      <select id="mv-filtro-tipo">
+        <option value="todos">Todos</option>
+        <option value="entrada">Entradas</option>
+        <option value="salida">Salidas</option>
+      </select>
+    </div>
     <ul id="movimientos-list" class="mov-list full"></ul>
-    <p id="movimientos-empty" class="empty-msg" hidden>Todavía no hay movimientos registrados.</p>
+    <p id="movimientos-empty" class="empty-msg" hidden>No hay movimientos que coincidan con el filtro.</p>
   </main>
 
   <main id="view-ganado" class="view" hidden>
