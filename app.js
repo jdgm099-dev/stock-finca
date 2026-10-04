@@ -662,12 +662,27 @@ function crearFilaProducto(p) {
    ===================================================================== */
 
 function renderizarMovimientos() {
+  const textoFiltro = document.getElementById("mv-filtro-producto").value.trim().toLowerCase();
+  const tipoFiltro = document.getElementById("mv-filtro-tipo").value;
+
+  let lista = [...state.movements].sort((a, b) => b.date.localeCompare(a.date));
+
+  if (tipoFiltro !== "todos") lista = lista.filter((m) => m.type === tipoFiltro);
+  if (textoFiltro) {
+    lista = lista.filter((m) => {
+      const p = state.products.find((x) => x.id === m.productId);
+      return p && p.name.toLowerCase().includes(textoFiltro);
+    });
+  }
+
   const ul = document.getElementById("movimientos-list");
   ul.innerHTML = "";
-  const lista = [...state.movements].sort((a, b) => b.date.localeCompare(a.date));
   document.getElementById("movimientos-empty").hidden = lista.length > 0;
   lista.forEach((m) => ul.appendChild(crearFilaMovimiento(m)));
 }
+
+document.getElementById("mv-filtro-producto").addEventListener("input", renderizarMovimientos);
+document.getElementById("mv-filtro-tipo").addEventListener("change", renderizarMovimientos);
 
 function crearFilaMovimiento(m) {
   const li = document.createElement("li");
