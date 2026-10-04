@@ -6,7 +6,7 @@
  * para que funcionen offline después del primer uso online.
  */
 
-const CACHE_NAME = "libreta-stock-v8";
+const CACHE_NAME = "libreta-stock-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
