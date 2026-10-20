@@ -2,7 +2,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="El Rayado">
-<meta name="theme-color" content="#1b5e20"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" id="ati" href="icon.svg">
+<meta name="theme-color" content="#1b5e20"><meta name="app-version" content="2026.10.12-7"><link rel="icon" href="icon-192.png"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" id="ati" href="icon.svg">
 <title>Verdulería El Rayado</title>
 <style>
 :root{--g:#1b5e20;--g2:#2e7d32;--r:#c62828;--o:#e65100}
@@ -24,7 +24,7 @@ input[type=checkbox]{width:30px;height:30px;margin:0 10px 0 0;vertical-align:mid
 .bar{position:sticky;bottom:0;background:#fff;margin:0 -14px;padding:8px 14px calc(8px + env(safe-area-inset-bottom));border-top:3px solid var(--g)}
 .x{background:none;border:0;font-size:22px;color:var(--r)}summary{padding:4px 0}
 .pc{transition:none}.q2{display:flex;align-items:center;gap:6px;margin-top:6px}.q2>button{width:58px;height:54px;font-size:30px;border:0;border-radius:12px;background:var(--g2);color:#fff}.q2>button.m{background:var(--r)}.q2 .qn{min-width:62px;text-align:center;font-size:28px;font-weight:800;border-bottom:3px dashed #777}.q2 .fr{margin:0 0 0 auto;gap:6px}.q2 .fr button{flex:none;width:46px;height:50px;font-size:22px}.g3{grid-template-columns:repeat(3,1fr)}.g3 .btn{font-size:18px;padding:14px 4px}.fr{display:flex;gap:8px;margin-top:8px}.fr button{flex:1;height:50px;font-size:26px;border:2px solid var(--g2);background:#fff;color:var(--g);border-radius:12px}.fr button.on{background:var(--g2);color:#fff}
-#ts{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000d;color:#fff;padding:14px 22px;border-radius:30px;font-size:21px;display:none;z-index:9}
+#upd{margin:10px 14px 0;background:#e65100;color:#fff;padding:12px;border-radius:14px;font-size:19px;text-align:center;box-shadow:0 3px 10px #0005;cursor:pointer}#ts{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000d;color:#fff;padding:14px 22px;border-radius:30px;font-size:21px;display:none;z-index:9}
 .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee}.tot{font-weight:800;font-size:24px}
 </style></head><body>
 <header><button id="bk" onclick="back()" hidden>← Volver</button><b id="t"></b><small id="sy" style="font-size:14px"></small></header>
@@ -46,6 +46,12 @@ function supCombos(){return db.combos.length?db.combos.map(c=>{const sc=combSupe
 function spSave(i){const p=P(i),v=mon($('#sp_'+i).value);if(v==(p.sp||0))return;p.sp=v;p.spd=v?T():'';save();$('#sd_'+i).innerHTML=spl(p);$('#scb').innerHTML=supCombos();toast('✅ Guardado')}
 function spSame(i){const p=P(i);p.spd=T();save();$('#sd_'+i).innerHTML=spl(p);$('#scb').innerHTML=supCombos();toast('✅ Listo, precio de hoy')}
 function openComp(i){const p=P(i);try{navigator.clipboard.writeText(p.name).catch(()=>{})}catch(e){}toast('Nombre copiado: pegalo en "Busca"',3500);window.open('https://comprador.digital/','_blank')}
+/* aviso de versión nueva: compara con el index.html que está publicado */
+const APP_V=(document.querySelector('meta[name=app-version]')||{}).content||'';
+let lastChk=0;
+async function chkUpd(manual){if(!manual&&Date.now()-lastChk<30000)return;lastChk=Date.now();try{const r=await fetch('index.html?v='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;const m=(await r.text()).match(/name="app-version" content="([^"]+)"/);if(m&&m[1]!==APP_V){if(!$('#upd')){const d=document.createElement('div');d.id='upd';d.innerHTML='🔄 <b>Hay una versión nueva.</b><br>Tocá acá para actualizar';d.onclick=updNow;document.querySelector('header').after(d)}}else if(manual)toast('✅ Ya tenés la última versión',2500)}catch(e){if(manual)toast('No se pudo comprobar. ¿Hay internet?',3000)}}
+async function updNow(){try{const g=await navigator.serviceWorker.getRegistration();if(g)await g.update()}catch(e){}location.reload()}
+setTimeout(chkUpd,4000);setInterval(chkUpd,6e5);document.addEventListener('visibilitychange',()=>{if(!document.hidden)chkUpd()});addEventListener('pageshow',()=>chkUpd());addEventListener('focus',()=>chkUpd());
 function recost(p){const L=db.moves.filter(m=>m.pid==p.id).sort((a,b)=>a.t-b.t);let s=0,c=null;L.forEach(m=>{if(m.k=='compra'){const s0=Math.max(s,0);c=(s0*(c??m.cost)+m.q*m.cost)/(s0+m.q)}s+=m.q});if(c!==null)p.cost=c}
 function reprice(){db.products.sort(srt);db.products.forEach(p=>{p.mk=mkOf(p);p.price=rnd(p.cost*(1+p.mk/100))});db.combos.forEach(c=>{const k=ccost(c);c.mk=mkOf(c,k);c.price=rnd(k*(1+c.mk/100))})}
 function loadDB(){const d={products:[],combos:[],moves:[],sales:[],exp:[],biz:{...BIZ0}};
@@ -53,7 +59,8 @@ try{const o=JSON.parse(localStorage.getItem(K));if(o&&o.products){Object.assign(
 d.products=seedProducts();return d}
 const srt=(a,b)=>a.name.localeCompare(b.name,'es');
 function localStore(){try{localStorage.setItem(K,JSON.stringify(db))}catch(e){alert('No hay espacio para guardar. Exportá tus datos y sacá fotos más chicas.')}}
-function save(){localStore();window.cloudSave&&cloudSave()}
+function save(){localStore();if(!window.cloudLive)localStorage.setItem('verdu_dirty','1');window.cloudSave&&cloudSave()}
+function cstHTML(){return'<small>Estado: '+(window.cloudState||'☁️ cargando…')+(window.cloudDetail?'<br><span class=bad>Detalle técnico: '+esc(window.cloudDetail)+'</span>':'')+'</small>'}
 const id=()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),P=i=>db.products.find(p=>p.id==i),C=i=>db.combos.find(c=>c.id==i);
 const g=n=>(Math.round(n)<0?'-':'')+'Gs. '+String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g,'.'),q=n=>String(Math.round(n*100)/100).replace('.',',');
 const num=s=>{s=String(s).trim().replace(',','.');const m=s.match(/^(?:(\d+(?:\.\d+)?)\s+)?(\d+)\s*\/\s*(\d+)$/);if(m&&+m[3])return(+(m[1]||0))+(+m[2])/(+m[3]);return parseFloat(s)||0},mon=s=>+String(s).replace(/[.\s]/g,'').replace(',','.')||0;
@@ -120,8 +127,8 @@ res:a=>{const per=a.p||'hoy',r=sum(per),lw=db.products.filter(low);return['📊 
 pub:()=>['📱 Publicar',`<div class=c><b>Elegí qué publicar:</b><br>${db.products.map(p=>`<label class=row><span><input type=checkbox class=pk value="p:${p.id}">${th(p)}${esc(p.name)}</span><span>${g(p.price)}</span></label>`).join('')}${db.combos.map(c=>`<label class=row><span><input type=checkbox class=pk value="c:${c.id}">${th(c)}${esc(c.name)}</span><span>${g(c.price)}</span></label>`).join('')}<small>Máximo 6 por imagen en WhatsApp y 5 en Instagram/Facebook.</small></div>
 <div class=c><label class=row style="border:0"><span><input type=checkbox id=cmp checked>Mostrar comparación con el súper</span></label><small>Aparece solo en los productos con precio del súper cargado que sea más caro que el tuyo.</small><label style="margin-top:12px">Título</label><input id=hd value="OFERTAS DE HOY"><label>Captura de Comprador Digital (opcional)</label><label class="btn w" style="font-size:18px;padding:12px;margin-bottom:6px">📸 Agregar captura<input type=file accept="image/*" hidden onchange="shotPick(this)"></label><small id=shotpv>Si querés, agregá una captura de pantalla de Comprador Digital con los precios. Recortala para que se vea solo la lista.</small><div style="height:10px"></div><label>Formato</label><select id=fm><option value=wa>WhatsApp (historia)<option value=ig>Instagram y Facebook (publicación)</select><label>Foto de fondo (opcional)</label><label class="btn w" style="font-size:18px;padding:12px;margin-bottom:8px">📷 Sacar o elegir foto<input type=file accept="image/*" hidden onchange="bg(this)"></label></div>
 <button class=btn onclick="mk()">🖼️ CREAR PUBLICACIÓN</button><div id=out></div>`],
-cfg:()=>['⚙️ Mi negocio',`<div class=c><label>Nombre del negocio</label><input id=bn value="${esc(db.biz.name)}"><label>Eslogan (aparece en las publicaciones)</label><input id=bs value="${esc(db.biz.slogan||'')}"><label>WhatsApp (opcional)</label><input id=bw inputmode=tel value="${esc(db.biz.wa)}"><label>Ganancia habitual para productos nuevos (%)</label><input id=bm inputmode=decimal value="${db.biz.mk??40}"><label>Redondear precios a (Gs.)</label><select id=br>${[100,500,1000].map(r=>`<option ${(db.biz.round||500)==r?'selected':''}>${r}`).join('')}</select><button class=btn onclick="saveB()">GUARDAR</button></div>
-<div class=c><label>Código de la verdulería (nube)</label><input id=cd value="${esc(localStorage.getItem('verdu_code')||'')}" placeholder="el mismo en los 2 celulares"><button class="btn w" onclick="setCode()">CONECTAR</button><small>Estado: ${$('#sy').textContent||'☁️ sin conectar'}</small></div><button class=btn onclick="exp()">📤 EXPORTAR DATOS</button><label class="btn w">📥 IMPORTAR DATOS<input type=file accept=".json,application/json" hidden onchange="imp(this)"></label><button class="btn w" onclick="expC()">📊 Ventas para Excel</button><button class="btn r" style="font-size:18px;padding:14px" onclick="resetTrans()">🧹 Borrar ventas, movimientos y gastos de prueba</button><div class=c><small>Hacé una copia seguido: tocá EXPORTAR y mandátela por WhatsApp o mail.</small></div>`]};
+cfg:()=>['⚙️ Mi negocio',`<div class=c><label>Nombre del negocio</label><input id=bn value="${esc(db.biz.name)}"><label>Estilo de las imágenes</label><select id=bst><option value=santo ${db.biz.style!='clasico'?'selected':''}>El Santo (acuarela y verduras)<option value=clasico ${db.biz.style=='clasico'?'selected':''}>Clásico (verde y rojo)</select><label>Eslogan (aparece en las publicaciones)</label><input id=bs value="${esc(db.biz.slogan||'')}"><label>WhatsApp (opcional)</label><input id=bw inputmode=tel value="${esc(db.biz.wa)}"><label>Ganancia habitual para productos nuevos (%)</label><input id=bm inputmode=decimal value="${db.biz.mk??40}"><label>Redondear precios a (Gs.)</label><select id=br>${[100,500,1000].map(r=>`<option ${(db.biz.round||500)==r?'selected':''}>${r}`).join('')}</select><button class=btn onclick="saveB()">GUARDAR</button></div>
+<div class=c><label>Código de la verdulería (nube)</label><input id=cd value="${esc(localStorage.getItem('verdu_code')||'')}" placeholder="el mismo en todos los dispositivos"><button class="btn w" onclick="setCode()">CONECTAR</button><div id=cst>${cstHTML()}</div><button class="btn w" style="font-size:17px;padding:10px;margin:8px 0 0" onclick="location.reload()">🔄 Reintentar conexión</button><button class="btn w" style="font-size:17px;padding:10px;margin:8px 0 0" onclick="window.cloudTest?cloudTest():toast('La nube todavía no arrancó',2500)">🔍 Probar conexión ahora</button></div><button class=btn onclick="exp()">📤 EXPORTAR DATOS</button><label class="btn w">📥 IMPORTAR DATOS<input type=file accept=".json,application/json" hidden onchange="imp(this)"></label><button class="btn w" onclick="expC()">📊 Ventas para Excel</button><button class="btn r" style="font-size:18px;padding:14px" onclick="resetTrans()">🧹 Borrar ventas, movimientos y gastos de prueba</button><div class=c><small>Hacé una copia seguido: tocá EXPORTAR y mandátela por WhatsApp o mail.</small></div><div class=c><small>Versión de la app: <b>${APP_V}</b></small><button class="btn w" style="font-size:17px;padding:10px;margin:8px 0 0" onclick="chkUpd(true)">🔄 Buscar actualización</button></div>`]};
 function mvu(){const p=P(S[S.length-1].a.id),bu=$('#bu').value;$('#lq').textContent=cu(bu)+'?';$('#fr').style.display=bu==p.unit?'none':'block';$('#lf').textContent=cu(p.unit)+' trae cada '+bu+'?';$('#f').value=fx(p,bu);cp()}
 function cp(){const a=S[S.length-1].a;if(a.k!='compra')return;const p=P(a.id),bu=$('#bu').value,n=num($('#q').value),t=mon($('#c').value),f=bu==p.unit?1:num($('#f').value);if(!(n&&t&&f)){$('#cp').textContent='';return}const u=n*f,nc=newCost(p,u,t);$('#cp').innerHTML='Entran '+qu(u,p.unit)+' al stock<br>Esta compra: '+g(t/u)+' por '+p.unit+'<br>Costo promedio: '+g(nc)+'<br>Precio de venta: <b>'+g(rnd(nc*(1+mkOf(p)/100)))+'</b> (ganancia '+mkOf(p)+'%)'}
 function ul(){const u=$('#u').value;$('#lc').textContent='Costo por '+u+' (Gs.)';$('#lm').textContent='Avisar cuando queden menos de ('+u+')';upd()}
@@ -167,13 +174,38 @@ function shrink(f,cb){const im=new Image();im.onload=()=>{const s=Math.min(1,400
 function pickP(el){const f=el.files[0];if(f)shrink(f,d=>{PI=d;$('#pv').innerHTML=`<img src="${d}" style="width:120px;border-radius:10px">`})}
 function pickC(el){const f=el.files[0];syncCB();if(f)shrink(f,d=>{CB.img=d;draw()})}
 const FF='"Avenir Next Condensed","Futura","Arial Black",Impact,sans-serif';
+const DEC={"tomates": [0, 0, 425, 370], "tomillo": [427, 0, 218, 350], "romero_sup": [647, 0, 256, 245], "romero_med": [905, 0, 168, 228], "cebolla_morada": [0, 372, 178, 214], "cebolla_amarilla": [180, 372, 163, 192], "papa_izq": [345, 372, 152, 190], "papas": [499, 372, 208, 184], "logo": [709, 372, 206, 180], "ajo": [917, 372, 128, 160]},FF2='Georgia,"Times New Roman",serif';
+let DECOR=null;
+const SANTO={santo:1,ff:FF2,map:{'#d50000':'#b3261e','#ffeb3b':'#fff0c2','#2e7d32':'#52783a','#10321a':'#2d3b22','#3b5e3f':'#5b6844','#c62828':'#a3392b','#37474f':'#5a4a33','rgba(255,255,255,.95)':'rgba(252,249,240,.97)','rgba(255,255,255,.96)':'rgba(252,249,240,.97)','#fefefe':'#2d3b22','rgba(255,255,255,.92)':'#4b4a2e','rgba(0,0,0,.6)':'rgba(0,0,0,0)'}},CLASICO={ff:FF},curTheme=()=>db.biz.style=='clasico'?CLASICO:SANTO;
+function loadDecor(){return new Promise(r=>{if(DECOR)return r(DECOR);const i=new Image();i.onload=()=>{DECOR=i;r(i)};i.onerror=()=>r(null);i.src='santo-decor.webp'})}
+function spaced(x,t,cx,y,gap){const a=[...t],ws=a.map(c=>x.measureText(c).width),tot=ws.reduce((p,q)=>p+q,0)+gap*(a.length-1);let px=cx-tot/2;x.textAlign='left';a.forEach((c,i)=>{x.fillText(c,px,y);px+=ws[i]+gap})}
 function star(x,cx,cy,R,r,n){x.beginPath();for(let i=0;i<n*2;i++){const a=Math.PI*i/n-Math.PI/2,d=i%2?r:R;x[i?'lineTo':'moveTo'](cx+Math.cos(a)*d,cy+Math.sin(a)*d)}x.closePath()}
 function wrapT(x,t,mw){const L=[];let c='';t.split(' ').forEach(k=>{const n=c?c+' '+k:k;if(c&&x.measureText(n).width>mw){L.push(c);c=k}else c=n});L.push(c);return L}
 function circ(x,im,cx,cy,r,ring){x.save();x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=r*.25;x.shadowOffsetY=r*.07;x.fillStyle='#fff';x.beginPath();x.arc(cx,cy,r+ring,0,7);x.fill();x.restore();x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.clip();const s=Math.max(2*r/im.width,2*r/im.height);x.drawImage(im,cx-im.width*s/2,cy-im.height*s/2,im.width*s,im.height*s);x.restore()}
-function chrome(w,h,title){const m=Math.min(w,h),cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');
-const B=z=>`900 ${z}px ${FF}`,sh=(c,b)=>{x.shadowColor=c;x.shadowBlur=b;x.shadowOffsetY=b/3},nsh=()=>{x.shadowColor='transparent';x.shadowBlur=0;x.shadowOffsetY=0},
+function chrome(w,h,title){const m=Math.min(w,h),cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d'),TH=curTheme();
+if(TH.map){['fillStyle','strokeStyle','shadowColor'].forEach(p=>{const d=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,p);Object.defineProperty(x,p,{get(){return d.get.call(x)},set(v){d.set.call(x,typeof v=='string'&&TH.map[v]?TH.map[v]:v)},configurable:true})})}
+let fy;
+const B=z=>`900 ${z}px ${TH.ff}`,sh=(c,b)=>{x.shadowColor=c;x.shadowBlur=b;x.shadowOffsetY=b/3},nsh=()=>{x.shadowColor='transparent';x.shadowBlur=0;x.shadowOffsetY=0},
 fit=(t,z,mw)=>{let s=z;x.font=B(s);while(x.measureText(t).width>mw&&s>10){s*=.94;x.font=B(s)}return s},
 strike=(t,cx,y,z,col,al)=>{x.font=B(z);const tw=x.measureText(t).width,x0=al=='left'?cx:al=='right'?cx-tw:cx-tw/2;x.fillStyle=col;x.textAlign=al;x.fillText(t,cx,y);x.fillRect(x0,y-z*.3,tw,Math.max(3,z*.09));return tw};
+if(TH.santo){
+ x.fillStyle='#f5f1e6';x.fillRect(0,0,w,h);
+ const blob=(cx,cy,r,c,al)=>{const g=x.createRadialGradient(cx,cy,0,cx,cy,r);g.addColorStop(0,`rgba(${c},${al})`);g.addColorStop(.55,`rgba(${c},${al*.55})`);g.addColorStop(1,`rgba(${c},0)`);x.fillStyle=g;x.fillRect(0,0,w,h)};
+ blob(0,h*.1,h*.5,'88,126,90',.8);blob(-w*.05,h*.6,h*.45,'108,146,108',.6);blob(0,h*.98,h*.42,'66,106,72',.85);blob(w,h*.04,h*.22,'150,176,140',.35);blob(w*.9,h*.96,h*.25,'150,176,140',.3);
+ if(BG){const s2=Math.max(w/BG.width,h/BG.height);x.drawImage(BG,(w-BG.width*s2)/2,(h-BG.height*s2)/2,BG.width*s2,BG.height*s2);x.fillStyle='rgba(245,241,230,.82)';x.fillRect(0,0,w,h)}
+ x.save();for(let i=0;i<6000;i++){x.fillStyle=`rgba(90,78,40,${Math.random()*.05})`;x.fillRect(Math.random()*w,Math.random()*h,1.6,1.6)}x.restore();
+ const k=m/1080,D=DECOR,dr=(n,dx,dy,sc,fl)=>{if(!D)return;const[sx,sy,sw,sh2]=DEC[n];if(fl){x.save();x.translate(dx+sw*sc,dy);x.scale(-1,1);x.drawImage(D,sx,sy,sw,sh2,0,0,sw*sc,sh2*sc);x.restore()}else x.drawImage(D,sx,sy,sw,sh2,dx,dy,sw*sc,sh2*sc)};
+ dr('tomates',0,0,.64*k);dr('romero_sup',w-256*.72*k,0,.72*k);
+ dr('tomillo',w-218*.5*k,h-350*.5*k,.5*k);dr('ajo',w-218*.5*k-95*k,h-160*.42*k-m*.008,.42*k);dr('romero_med',0,h-228*.55*k,.55*k,1);dr('cebolla_morada',168*.55*k-20*k,h-214*.42*k-m*.008,.42*k);
+ const nm=db.biz.name,mt=nm.match(/^(verduler[ií]a)\s+(.+)$/i),l1=mt?mt[1].toUpperCase():'',l2=(mt?mt[2]:nm).replace(/["“”']/g,'').toUpperCase();
+ if(D){const[sx,sy,sw,sh2]=DEC.logo,lw=m*.105;x.drawImage(D,sx,sy,sw,sh2,w/2-lw/2,m*.016,lw,lw*sh2/sw)}
+ x.textAlign='center';x.fillStyle='#7a6a2f';x.font=`bold ${m*.03}px ${FF2}`;if(l1)spaced(x,l1,w/2,m*.135,m*.011);x.textAlign='center';
+ x.fillStyle='#4f4a22';fit(l2,m*.095,w*.5);x.fillText(l2,w/2,l1?m*.212:m*.17);
+ if(db.biz.slogan){x.fillStyle='#4a4222';x.font=`${m*.028}px ${FF2}`;let z=m*.028;while(x.measureText(db.biz.slogan).width>w*.58&&z>10){z*=.95;x.font=`${z}px ${FF2}`}x.fillText(db.biz.slogan,w/2,(l1?m*.212:m*.17)+m*.044)}
+ if(title){const ry=m*.282,rh0=m*.085,gx=w*.1;x.fillStyle='#b79b45';x.fillRect(w*.04,ry+rh0/2-1.5,gx*.9,3);x.fillRect(w-w*.04-gx*.9,ry+rh0/2-1.5,gx*.9,3);
+  x.fillStyle='#b3261e';sh('rgba(0,0,0,.3)',m*.015);rp(x,w*.16,ry,w*.68,rh0,rh0/2);x.fill();nsh();x.fillStyle='#fff0c2';const hz=fit(title,m*.055,w*.58);x.fillText(title,w/2,ry+rh0/2+hz*.34)}
+ fy=h-m*.115;
+}else{
 /* fondo */
 let gr=x.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#0a3d12');gr.addColorStop(1,'#23932f');x.fillStyle=gr;x.fillRect(0,0,w,h);
 if(BG){const s=Math.max(w/BG.width,h/BG.height);x.drawImage(BG,(w-BG.width*s)/2,(h-BG.height*s)/2,BG.width*s,BG.height*s);x.fillStyle='rgba(4,40,10,.6)';x.fillRect(0,0,w,h)}
@@ -185,19 +217,34 @@ if(db.biz.slogan){x.fillStyle='#ffd600';const sl=db.biz.slogan;fit(sl,m*.036,w*.
 if(title){const ry=m*.215,rh0=m*.12,rx0=w*.05,rx1=w*.95,nt=rh0*.28;x.fillStyle='#d50000';sh('rgba(0,0,0,.45)',m*.02);x.beginPath();x.moveTo(rx0,ry);x.lineTo(rx1,ry);x.lineTo(rx1-nt,ry+rh0/2);x.lineTo(rx1,ry+rh0);x.lineTo(rx0,ry+rh0);x.lineTo(rx0+nt,ry+rh0/2);x.closePath();x.fill();nsh();
 x.fillStyle='#ffeb3b';const hz=fit(title,m*.088,(rx1-rx0)*.8);x.fillText(title,w/2,ry+rh0/2+hz*.34)}
 /* pie */
-const fy=h-m*.135,fh=m*.1;x.fillStyle='#25d366';sh('rgba(0,0,0,.45)',m*.02);rp(x,w*.06,fy,w*.88,fh,fh/2);x.fill();nsh();
-const ft=db.biz.wa?'PEDIDOS POR WHATSAPP: '+db.biz.wa:'PEDIDOS POR WHATSAPP';x.fillStyle='#04230a';fit(ft,m*.055,w*.8);x.fillText(ft,w/2,fy+fh/2+m*.02);
+fy=h-m*.05;
 
-return{cv,x,B,sh,nsh,fit,strike,fy,m,T0:title?m*.38:m*.215}}
+}
+return{cv,x,B,sh,nsh,fit,strike,fy,m,T0:title?m*.38:(TH.santo?m*.30:m*.215)}}
 async function mk(){const sel=[...document.querySelectorAll('.pk:checked')].map(i=>i.value).slice(0,$('#fm').value=='wa'?6:5);if(!sel.length)return alert('Elegí al menos un producto');
 const cmp=$('#cmp')&&$('#cmp').checked,it=await Promise.all(sel.map(async k=>{const[t,i]=k.split(':'),o=t=='c'?C(i):P(i),v=o.price,sp0=t=='c'?combSuper(o):(o.sp||0);
 return{n:o.name.toUpperCase(),nm:o.name,v,num:g(v).slice(4),u:t=='p'?PER[o.unit]:'',sp:cmp&&sp0>v?sp0:0,pc:sp0>v?Math.round((sp0-v)/sp0*100):0,sd:t=='c'?o.items.map(c=>(P(c.pid)||{}).spd).filter(Boolean).sort()[0]:o.spd,cont:t=='c'?o.items.map(c=>{const p=P(c.pid);return p?{n:p.name,q:qf(c.q)+' '+pl(p.unit,c.q)}:null}).filter(Boolean):null,im:await LI(o.img)}}));
+if(curTheme().santo)await loadDecor();
 const[w,h]={wa:[1080,1920],ig:[1080,1350],fb:[1080,1350]}[$('#fm').value],m=Math.min(w,h),{cv,x,B,sh,nsh,fit,strike,fy}=chrome(w,h,$('#hd').value.toUpperCase());
 const anyC=it.some(i=>i.sp),sdate=it.filter(i=>i.sp&&i.sd).map(i=>i.sd).sort()[0],srcH=anyC?m*.045:0,T0=m*.38,A=fy-m*.02-srcH-T0,n=it.length;
-if(anyC){x.textAlign='center';x.fillStyle='rgba(255,255,255,.92)';const st='Precios del súper: Comprador Digital (comprador.digital)'+(sdate?' · '+dmy(sdate):'');fit(st,m*.027,w*.92);x.fillText(st,w/2,fy-m*.017)}
-const band=i=>{const cy2=fy-m*.02-srcH-m*.14,ch=m*.13;x.fillStyle='#fff';sh('rgba(0,0,0,.4)',m*.015);rp(x,w*.06,cy2,w*.88,ch,m*.03);x.fill();nsh();x.textAlign='left';x.fillStyle='#37474f';x.font=B(m*.032);x.fillText('EN EL SÚPER',w*.09,cy2+ch*.38);strike(g(i.sp),w*.09,cy2+ch*.8,m*.06,'#c62828','left');x.fillStyle='#2e7d32';rp(x,w*.58,cy2+ch*.12,w*.33,ch*.76,ch*.2);x.fill();x.fillStyle='#fff';x.textAlign='center';fit('AHORRÁS '+i.pc+'%',m*.065,w*.3);x.fillText('AHORRÁS '+i.pc+'%',w*.745,cy2+ch*.62)};
-if(n==1&&it[0].cont&&it[0].cont.length){const i=it[0];let z=m*.09;x.font=B(z);let L=wrapT(x,i.n,w*.88);while(L.length>2&&z>20){z*=.9;x.font=B(z);L=wrapT(x,i.n,w*.88)}
- x.textAlign='center';x.fillStyle='#fff';sh('rgba(0,0,0,.6)',m*.015);L.forEach((l,k)=>x.fillText(l,w/2,T0+m*.01+z*.85+k*z*1.05));nsh();
+if(anyC){x.textAlign='center';x.fillStyle='rgba(255,255,255,.92)';const st='Precios del súper: Comprador Digital (comprador.digital)'+(sdate?' · '+dmy(sdate):'');fit(st,m*.027,curTheme().santo?w*.72:w*.92);x.fillText(st,w/2,fy-m*.024)}
+const band=i=>{const ch=m*.145,cy2=fy-m*.02-srcH-m*.155;x.fillStyle='#fff';sh('rgba(0,0,0,.4)',m*.015);rp(x,w*.06,cy2,w*.88,ch,m*.03);x.fill();nsh();x.textAlign='left';x.fillStyle='#37474f';x.font=B(m*.03);x.fillText('EN EL SÚPER',w*.09,cy2+ch*.3);strike(g(i.sp),w*.09,cy2+ch*.84,m*.055,'#c62828','left');x.fillStyle='#2e7d32';rp(x,w*.58,cy2+ch*.12,w*.33,ch*.76,ch*.2);x.fill();x.fillStyle='#fff';x.textAlign='center';fit('AHORRÁS '+i.pc+'%',m*.065,w*.3);x.fillText('AHORRÁS '+i.pc+'%',w*.745,cy2+ch*.62)};
+if(n==1&&it[0].cont&&it[0].cont.length>7){const i=it[0],cl=i.cont.length>24?[...i.cont.slice(0,23),{n:'y '+(i.cont.length-23)+' más',q:''}]:i.cont,nl=cl.length;
+ let z=m*.075;x.font=B(z);let L=wrapT(x,i.n,w*.9);while(L.length>1&&z>m*.05){z*=.94;x.font=B(z);L=wrapT(x,i.n,w*.9)}while(L.length>2&&z>20){z*=.9;x.font=B(z);L=wrapT(x,i.n,w*.9)}
+ x.textAlign='center';x.fillStyle='#fefefe';sh('rgba(0,0,0,.6)',m*.015);L.forEach((l,k)=>x.fillText(l,w/2,T0+m*.01+z*.85+k*z*1.05));nsh();
+ const nameB=T0+m*.01+L.length*z*1.05+m*.025,bandH=0,barH=i.sp?m*.16:m*.105,gap=m*.025,pad=m*.025,availH=T0+A-nameB-bandH-barH-gap*2,
+ AB={unidades:'un.',unidad:'un.',cabezas:'cab.',cabeza:'cab.',docenas:'doc.',docena:'doc.',atados:'at.',atado:'at.',mazos:'maz.',mazo:'maz.',bolsas:'bol.',bolsa:'bol.',cajas:'caj.',cajones:'caj.'};
+ const cols=(availH-pad*2)/(nl*1.38)>=m*.04?1:2,rows=Math.ceil(nl/cols),cwid=w*.9,cx0=w*.05,colW=(cwid-pad*2-(cols-1)*pad)/cols,tx=c=>cols==2?{n:c.n,q:c.q.replace(/(\S+)$/,u=>AB[u]||u)}:c;
+ let lz=Math.min(m*.058,(availH-pad*2)/(rows*1.38));const fitsW=()=>!cl.some(c=>{const t=tx(c);x.font=B(lz);return x.measureText(t.n).width+x.measureText(t.q).width+lz*.8>colW});while(lz>12&&!fitsW())lz*=.95;
+ const chH=rows*lz*1.38+pad*2,cy0=nameB+Math.max(0,(availH-chH)/2);
+ x.fillStyle='rgba(255,255,255,.96)';sh('rgba(0,0,0,.4)',m*.015);rp(x,cx0,cy0,cwid,chH,m*.03);x.fill();nsh();
+ cl.forEach((c,k)=>{const col=Math.floor(k/rows),r=k%rows,xb=cx0+pad+col*(colW+pad),yy=cy0+pad+lz*1.38*r+lz*1.02,t=tx(c);x.font=B(lz);x.textAlign='left';x.fillStyle='#10321a';x.fillText(t.n,xb,yy);x.textAlign='right';x.fillStyle='#d50000';x.fillText(t.q,xb+colW,yy)});
+ const by=cy0+chH+gap;x.fillStyle='#d50000';sh('rgba(0,0,0,.45)',m*.015);rp(x,cx0,by,cwid,barH,i.sp?m*.04:barH/2);x.fill();nsh();
+ if(i.sp){const p0=barH*.4;x.textAlign='left';x.fillStyle='#ffeb3b';x.font=B(barH*.19);x.fillText('COMBO',cx0+p0*.6,by+barH*.3);x.fillStyle='#fff';fit('Gs. '+i.num,barH*.46,cwid*.46);x.fillText('Gs. '+i.num,cx0+p0*.6,by+barH*.8);
+  strike('SÚPER '+g(i.sp),cx0+cwid-p0*.6,by+barH*.37,barH*.2,'#fff','right');const pw=cwid*.37,ph2=barH*.34,px=cx0+cwid-p0*.6-pw,py=by+barH*.5;x.fillStyle='#2e7d32';rp(x,px,py,pw,ph2,ph2/2);x.fill();x.fillStyle='#fff';x.textAlign='center';fit('AHORRÁS '+i.pc+'%',ph2*.62,pw*.9);x.fillText('AHORRÁS '+i.pc+'%',px+pw/2,py+ph2*.7)}
+ else{x.textAlign='left';x.fillStyle='#ffeb3b';x.font=B(barH*.34);x.fillText('COMBO',cx0+barH*.45,by+barH*.64);x.textAlign='right';x.fillStyle='#fff';fit('Gs. '+i.num,barH*.62,cwid*.6);x.fillText('Gs. '+i.num,cx0+cwid-barH*.45,by+barH*.7)}}
+else if(n==1&&it[0].cont&&it[0].cont.length){const i=it[0];let z=m*.09;x.font=B(z);let L=wrapT(x,i.n,w*.88);while(L.length>2&&z>20){z*=.9;x.font=B(z);L=wrapT(x,i.n,w*.88)}
+ x.textAlign='center';x.fillStyle='#fefefe';sh('rgba(0,0,0,.6)',m*.015);L.forEach((l,k)=>x.fillText(l,w/2,T0+m*.01+z*.85+k*z*1.05));nsh();
  const nameB=T0+m*.01+L.length*z*1.05+m*.03,rest=T0+A-nameB-(i.sp?m*.15:0),cl=i.cont.length>8?[...i.cont.slice(0,7),{n:'y '+(i.cont.length-7)+' más',q:''}]:i.cont,stack=h>w*1.5,cwid=stack?w*.9:w*.62,cx0=stack?w*.05:w*.04,pad=m*.03,nl=cl.length;
  let lz=m*(stack?.075:.07);const fitsW=()=>!cl.some(c=>{x.font=B(lz);return x.measureText(c.n).width+x.measureText(c.q).width+lz*.8>cwid-pad*2});while(lz>12&&!fitsW())lz*=.95;
  const bRs=stack?Math.min(m*.2,rest*.17):0,availH=stack?rest-bRs*2.16-m*.04:rest;if(nl*lz*1.38+pad*2>availH)lz=Math.max(12,(availH-pad*2)/(nl*1.38));
@@ -208,16 +255,16 @@ if(n==1&&it[0].cont&&it[0].cont.length){const i=it[0];let z=m*.09;x.font=B(z);le
  star(x,bcx,bcy,bR*1.08,bR*.9,16);x.fillStyle='#d50000';sh('rgba(0,0,0,.5)',m*.02);x.fill();nsh();x.lineWidth=m*.008;x.strokeStyle='#fff';x.stroke();x.textAlign='center';x.fillStyle='#ffeb3b';x.font=B(bR*.2);x.fillText('Gs.',bcx,bcy-bR*.42);const nz=fit(i.num,bR*.52,bR*1.5);x.fillStyle='#fff';x.fillText(i.num,bcx,bcy+nz*.28);x.fillStyle='#ffeb3b';x.font=B(bR*.2);x.fillText('combo',bcx,bcy+bR*.62);if(i.sp)band(i)}
 else if(n==1){const i=it[0],hasI=!!i.im,r=Math.min(w*.29,A*(i.sp?.3:.34));let y=T0+m*.02;
  if(hasI){circ(x,i.im,w/2-r*.18,y+r,r,m*.016);}
- const bx=hasI?w/2+r*.72:w/2,by=hasI?y+r*1.5:y+A*.2,R=Math.min(m*.2,A*.2);
+ const bx=hasI?w/2+r*.72:w/2,by=hasI?y+r*1.5:y+A*.2,R=Math.min(m*.25,A*.24);
  /* nombre */
- x.textAlign='center';x.fillStyle='#fff';sh('rgba(0,0,0,.6)',m*.015);let z=m*.1;x.font=B(z);let L=wrapT(x,i.n,w*.86);while(L.length>2&&z>20){z*=.9;x.font=B(z);L=wrapT(x,i.n,w*.86)}
+ x.textAlign='center';x.fillStyle='#fefefe';sh('rgba(0,0,0,.6)',m*.015);let z=m*.1;x.font=B(z);let L=wrapT(x,i.n,w*.86);while(L.length>2&&z>20){z*=.9;x.font=B(z);L=wrapT(x,i.n,w*.86)}
  const ny=hasI?y+r*2+m*.08+z*.8:y+m*.04+z*.8;L.forEach((l,k)=>x.fillText(l,w/2,ny+k*z*1.05));nsh();
  /* precio */
  const py=ny+(L.length-1)*z*1.05+m*.03+R*(hasI?0:.15);const cx=hasI?w/2+r*.55:w/2,cy=hasI?y+r*1.55:py+R;
  const bR=hasI?R*.92:R;star(x,cx,hasI?cy:py+R,bR*1.08,bR*.9,16);x.fillStyle='#d50000';sh('rgba(0,0,0,.5)',m*.02);x.fill();nsh();x.lineWidth=m*.008;x.strokeStyle='#fff';x.stroke();
  const yy=hasI?cy:py+R;x.fillStyle='#ffeb3b';x.font=B(bR*.2);x.fillText('Gs.',cx,yy-bR*.42);const nz=fit(i.num,bR*.52,bR*1.5);x.fillStyle='#fff';x.fillText(i.num,cx,yy+nz*.28);x.fillStyle='#ffeb3b';x.font=B(bR*.2);x.fillText(i.u,cx,yy+bR*.62);
  if(i.sp)band(i)}
-else{const wts=it.map(i=>i.cont&&i.cont.length?1.3+.12*Math.min(i.cont.length,8):1),sw=wts.reduce((a,b)=>a+b,0),u0=Math.min(A/sw,m*(n<=3?.36:.25)),y0=T0+(A-u0*sw)/2;it.forEach((i,k)=>{const rh=u0*wts[k],y=y0+wts.slice(0,k).reduce((a,b)=>a+b,0)*u0,ph=rh*.88,top=y+rh*.06,cx0=m*.05,cw=w-m*.1;x.fillStyle='#fff';sh('rgba(0,0,0,.4)',m*.014);rp(x,cx0,top,cw,ph,rh*.16);x.fill();nsh();
+else{const wts=it.map(i=>i.cont&&i.cont.length?(i.cont.length>7?1.6:1.3+.12*i.cont.length):1),sw=wts.reduce((a,b)=>a+b,0),u0=Math.min(A/sw,m*(n<=3?.36:.25)),y0=T0+(A-u0*sw)/2;it.forEach((i,k)=>{const rh=u0*wts[k],y=y0+wts.slice(0,k).reduce((a,b)=>a+b,0)*u0,ph=rh*.88,top=y+rh*.06,cx0=m*.05,cw=w-m*.1;x.fillStyle='#fff';sh('rgba(0,0,0,.4)',m*.014);rp(x,cx0,top,cw,ph,rh*.16);x.fill();nsh();
  x.fillStyle='#2e7d32';rp(x,cx0,top,rh*.09,ph,rh*.04);x.fill();
  const r=ph*.34,pcx=cx0+rh*.16+r;if(i.im)circ(x,i.im,pcx,top+ph/2,r,rh*.02);
  const tx=i.im?pcx+r+rh*.1:cx0+rh*.22,tgW=m*.27,gx=cx0+cw-tgW-rh*.1,mw=gx-tx-rh*.1,th0=i.sp?top+ph*.08:top+ph*.16,thh=i.sp?ph*.56:ph*.68;
@@ -226,11 +273,12 @@ else{const wts=it.map(i=>i.cont&&i.cont.length?1.3+.12*Math.min(i.cont.length,8)
  if(i.sp){const py=top+ph*.68,pH=ph*.24;x.fillStyle='#2e7d32';rp(x,gx,py,tgW,pH,pH/2);x.fill();x.fillStyle='#fff';fit('AHORRÁS '+i.pc+'%',pH*.6,tgW*.9);x.fillText('AHORRÁS '+i.pc+'%',gx+tgW/2,py+pH*.68)}
  /* nombre (hasta 2 líneas) y precio del súper */
  const hasC=i.cont&&i.cont.length,lay=f=>{let z=Math.min(ph*(hasC?.22:.27),m*.06)*f,L;x.font=B(z);L=wrapT(x,i.n,mw);while((L.length>2||L.some(l=>x.measureText(l).width>mw))&&z>12){z*=.93;x.font=B(z);L=wrapT(x,i.n,mw)}
- let CL=[],cz=0;if(hasC){cz=Math.min(ph*.19,m*.042)*f;const txt=i.cont.map(c=>c.n+' '+c.q).join(' · ');x.font=B(cz);CL=wrapT(x,txt,mw);while(CL.length>4&&cz>10){cz*=.93;x.font=B(cz);CL=wrapT(x,txt,mw)}}
+ let CL=[],cz=0;if(hasC){cz=Math.min(ph*.19,m*.042)*f;const txt=i.cont.length>7?i.cont.slice(0,5).map(c=>c.n).join(' · ')+' · y '+(i.cont.length-5)+' más':i.cont.map(c=>c.n+' '+c.q).join(' · ');x.font=B(cz);CL=wrapT(x,txt,mw);while(CL.length>4&&cz>10){cz*=.93;x.font=B(cz);CL=wrapT(x,txt,mw)}}
  const z2=Math.min(ph*.16*f,z*.75);return{z,L,cz,CL,z2,bh:L.length*z*1.06+(hasC?CL.length*cz*1.2+cz*.35:0)+(i.sp?z2*1.5:0)}};
  let ff=1,R=lay(1);while(R.bh>ph*.88&&ff>.35){ff*=.92;R=lay(ff)}const{z,L,cz,CL,z2,bh}=R;let ty=top+ph/2-bh/2+z*.85;x.textAlign='left';x.fillStyle='#10321a';x.font=B(z);L.forEach((l,q2)=>x.fillText(l,tx,ty+q2*z*1.06));
  if(hasC){x.font=B(cz);x.fillStyle='#3b5e3f';CL.forEach((l,q2)=>x.fillText(l,tx,ty+L.length*z*1.06+cz*.35+q2*cz*1.2))}
  if(i.sp){const t1='SÚPER '+g(i.sp);let zz=z2;x.font=B(zz);while(x.measureText(t1).width>mw&&zz>10){zz*=.94;x.font=B(zz)}strike(t1,tx,(hasC?ty+L.length*z*1.06+cz*.35+(CL.length-1)*cz*1.2:ty+(L.length-1)*z*1.06)+z2*1.55,zz,'#c62828','left')}})}
+if(n>1&&it.some(i=>i.cont&&i.cont.length>7))toast('Tip: un combo largo se ve completo si lo publicás solo, sin otros productos.',5500);
 const cap=[$('#hd').value.toUpperCase(),'',...it.map(i=>'• '+i.nm+': '+g(i.v)+(i.u?' '+i.u:'')+(i.sp?' (en el súper '+g(i.sp)+', ahorrás '+i.pc+'%)':'')+(i.cont&&i.cont.length?'\n'+i.cont.map(c=>'   – '+c.n+' '+c.q).join('\n'):'')),'',...(anyC?['Precios del súper según Comprador Digital (https://comprador.digital)'+(sdate?' al '+dmy(sdate):''),'']:[]),...(db.biz.slogan?[db.biz.name+' — '+db.biz.slogan]:[]),db.biz.wa?'Pedidos por WhatsApp: '+db.biz.wa:'Pedidos por WhatsApp'].join('\n');
 CVS=[cv];if(SHOT)CVS.push(mkShot(SHOT,w,h));const url=cv.toDataURL('image/png'),url2=SHOT?CVS[1].toDataURL('image/png'):'';$('#out').innerHTML=`<img src="${url}" style="width:100%;border-radius:12px;margin-bottom:12px"><button class=btn onclick="shr()">📤 COMPARTIR</button>${SHOT?`<img src="${url2}" style="width:100%;border-radius:12px;margin-bottom:12px">`:''}<a class="btn w" download="publicacion-1.png" href="${url}">⬇️ DESCARGAR${SHOT?' IMAGEN 1':''}</a>${SHOT?`<a class="btn w" download="publicacion-2.png" href="${url2}">⬇️ DESCARGAR IMAGEN 2</a>`:''}<small>Si no baja, mantené apretada la imagen y tocá "Guardar".</small><label style="margin-top:14px">Texto para pegar en la publicación</label><textarea id=cap rows=7 style="width:100%;font-size:18px;padding:10px;border:2px solid #555;border-radius:12px">${esc(cap)}</textarea><button class="btn w" onclick="copyCap()">📋 COPIAR TEXTO</button>`}
 function mkShot(im,w,h){const{cv,x,sh,nsh,fit,fy,m,T0}=chrome(w,h,''),bot=fy-m*.075,fw=w*.88,fh=bot-T0,k=Math.min(fw/im.width,fh/im.height),iw=im.width*k,ih=im.height*k,ix=(w-iw)/2,iy=T0+(fh-ih)/2,pd=m*.012;
@@ -239,7 +287,7 @@ x.textAlign='center';x.fillStyle='rgba(255,255,255,.92)';const st='Captura de Co
 function shotPick(el){const f=el.files[0];if(!f)return;const im=new Image();im.onload=()=>{SHOT=im;$('#shotpv').textContent='✅ Captura lista: se agrega como segunda imagen'};im.src=URL.createObjectURL(f)}
 function copyCap(){const t=$('#cap');t.select();try{navigator.clipboard.writeText(t.value).catch(()=>document.execCommand('copy'))}catch(e){document.execCommand('copy')}toast('✅ Texto copiado')}
 function shr(){Promise.all(CVS.map((c,i)=>new Promise(r=>c.toBlob(b=>r(new File([b],'publicacion-'+(i+1)+'.png',{type:'image/png'})))))).then(F=>{if(navigator.canShare&&navigator.canShare({files:F}))navigator.share({files:F}).catch(()=>{});else alert('Mantené apretada la imagen y elegí Guardar')})}
-function saveB(){db.biz={name:$('#bn').value.trim()||BIZ0.name,slogan:$('#bs').value.trim(),wa:$('#bw').value.trim(),mk:num($('#bm').value)||40,round:+$('#br').value||500};reprice();save();toast('✅ Guardado');back()}
+function saveB(){db.biz={name:$('#bn').value.trim()||BIZ0.name,slogan:$('#bs').value.trim(),style:$('#bst').value,wa:$('#bw').value.trim(),mk:num($('#bm').value)||40,round:+$('#br').value||500};reprice();save();toast('✅ Guardado');back()}
 function dl(name,txt,type){const b=new Blob([txt],{type}),f=new File([b],name,{type});if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(()=>{});else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click()}}
 function exp(){localStorage.setItem('verdu_exp',Date.now());dl('verduleria-'+T()+'.json',JSON.stringify(db),'application/json')}
 function expC(){const r=['Fecha;Hora;Detalle;Total;Costo;Ganancia'];db.sales.forEach(s=>r.push([dmy(day(s.t)),hm(s.t),'"'+s.items.map(i=>q(i.q)+' '+i.u+' '+i.n).join(', ')+'"',Math.round(s.total),Math.round(s.cost),Math.round(s.total-s.cost)].join(';')));dl('ventas-'+T()+'.csv','\uFEFF'+r.join('\n'),'text/csv')}
@@ -250,34 +298,53 @@ if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
 if(!localStorage.getItem('verdu_first'))localStorage.setItem('verdu_first',Date.now());
 draw();
 </script><script type="module">
-import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,doc,onSnapshot,setDoc,writeBatch} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import {firebaseConfig as cfg} from './config.js';
-const COLS=['products','combos','moves','sales','exp'],sh={products:{},combos:{},moves:{},sales:{},exp:{}},code=localStorage.getItem('verdu_code'),sy=t=>{$('#sy').textContent=t},LIVE=['home','stock','prod','prec','vta','hv','res'];
-let shBiz='',fs,live=false;
-const col=c=>collection(fs,'profiles',code,c),dc=(c,i)=>doc(fs,'profiles',code,c,i),refresh=()=>{if(LIVE.includes(S[S.length-1].v))draw()};
-if(!cfg.apiKey||cfg.apiKey.startsWith('PEGAR'))sy('☁️ sin nube');
-else if(!code)sy('☁️ falta código');
-else{try{const app=initializeApp(cfg);try{fs=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch(e){fs=initializeFirestore(app,{})}sy('☁️ conectando…');start()}catch(e){console.error(e);sy('⚠️ sin nube')}}
+/* Nube (Firestore). La app funciona sola en el celular aunque esto falle; acá solo se sincroniza. */
+const U='https://www.gstatic.com/firebasejs/10.12.2/',COLS=['products','combos','moves','sales','exp'],sh={products:{},combos:{},moves:{},sales:{},exp:{}},code=localStorage.getItem('verdu_code'),LIVE=['home','stock','prod','prec','vta','hv','res'];
+let shBiz='',fs,F,live=false;
+const sy=(t,d)=>{window.cloudState=t;window.cloudDetail=d||'';const a=$('#sy');if(a)a.textContent=t;const c=$('#cst');if(c)c.innerHTML=cstHTML()},
+col=c=>F.collection(fs,'profiles',code,c),dc=(c,i)=>F.doc(fs,'profiles',code,c,i),refresh=()=>{if(LIVE.includes(S[S.length-1].v))draw()},em=e=>(e&&(e.code?e.code+': ':'')+(e.message||e))||'';
+(async()=>{
+ let cfg;try{cfg=(await import('./config.js')).firebaseConfig}catch(e){sy('⚠️ Falta o falla config.js',em(e));return}
+ if(!cfg||!cfg.apiKey||String(cfg.apiKey).startsWith('PEGAR')){sy('☁️ sin nube (falta completar config.js)');return}
+ if(!code){sy('☁️ falta el código');return}
+ sy('☁️ conectando…');
+ let A;try{[A,F]=await Promise.all([import(U+'firebase-app.js'),import(U+'firebase-firestore.js')])}catch(e){sy('⚠️ No se pudo cargar Firebase. ¿Bloqueador de anuncios o sin internet?',em(e));return}
+ try{const app=A.initializeApp(cfg),opt={experimentalAutoDetectLongPolling:true};try{fs=F.initializeFirestore(app,{...opt,localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})})}catch(e){fs=F.initializeFirestore(app,opt)}start()}catch(e){console.error(e);sy('⚠️ Error al iniciar la nube',em(e))}
+ setTimeout(()=>{if(!live&&window.cloudState=='☁️ conectando…')sy('⚠️ No logra conectar. Revisá internet y desactivá bloqueadores de anuncios para este sitio.',window.cloudDetail)},20000)
+})();
 function bizFrom(s){const b=s.docs.find(d=>d.id=='biz');if(b){db.biz=bizFix(Object.assign({...BIZ0},b.data()));shBiz=JSON.stringify(db.biz)}}
-function status(snaps){const p=[...COLS,'cfg'].some(c=>snaps[c]&&snaps[c].metadata.hasPendingWrites);sy(p?'⏳ guardando…':'☁️ al día')}
+let online=false,pend=0,stuck=false,stuckT=null,t0=Date.now(),probing=false;
+const WARN='⚠️ No logra enviar los cambios a la nube. Revisá la conexión, cerrá otras pestañas de la app y desactivá bloqueadores de anuncios.';
+function status(){if(!live)return;
+ if(pend>0){if(stuck)sy(WARN,'Hay cambios guardados en este equipo que el servidor todavía no confirmó');else{sy('⏳ guardando…');if(!stuckT)stuckT=setTimeout(()=>{stuckT=null;if(pend>0){stuck=true;status()}},15000)}}
+ else{stuck=false;if(stuckT){clearTimeout(stuckT);stuckT=null}sy(online?'☁️ al día':(Date.now()-t0<8000?'☁️ conectando…':'☁️ Sin conexión: se guarda en este equipo y se envía cuando vuelva'))}}
+/* ¿hay conexión real con el servidor? se pregunta directamente (1 lectura) y también se escucha el estado del documento "meta" */
+async function probe(){if(probing||!live)return;probing=true;try{await F.getDocFromServer(dc('cfg','meta'));online=true;if(window.cloudDetail&&/servidor/.test(window.cloudDetail))window.cloudDetail=''}catch(e){online=false}probing=false;status();return online}
+function connWatch(){F.onSnapshot(dc('cfg','meta'),{includeMetadataChanges:true},s=>{online=!s.metadata.fromCache;status()},e=>{online=false;status()});setTimeout(()=>{if(!online)probe()},2500);setInterval(()=>{if(!online&&!document.hidden)probe()},30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!online)probe()})}
+window.cloudTest=async()=>{if(!live){toast('La nube todavía no arrancó. Mirá el Estado.',3000);return}toast('Probando…',1500);const ok=await probe();if(ok)toast('✅ Conexión con la nube: OK',3500);else{try{await F.getDocFromServer(dc('cfg','meta'))}catch(e){sy('⚠️ No se pudo hablar con el servidor de Firebase',em(e))}toast('❌ Sin conexión con la nube',3500)}};
 function start(){const snaps={},seen={};
-[...COLS,'cfg'].forEach(c=>onSnapshot(col(c),s=>{snaps[c]=s;
+[...COLS,'cfg'].forEach(c=>F.onSnapshot(col(c),s=>{snaps[c]=s;
 if(!live){if(c=='cfg'&&s.metadata.fromCache&&!s.docs.some(d=>d.id=='meta'))return;seen[c]=1;if(Object.keys(seen).length==6)first(snaps)}
-else apply(c,s);if(live)status(snaps)},e=>{console.error(e);sy('⚠️ error de nube')}))}
-function first(snaps){const cloudHas=snaps.cfg.docs.some(d=>d.id=='meta'),localHas=db.moves.length||db.sales.length||db.exp.length||db.combos.length||db.products.length>7;
-const fromCloud=()=>{COLS.forEach(c=>apply(c,snaps[c],1));bizFrom(snaps.cfg)},mark=()=>{COLS.forEach(c=>{sh[c]={};snaps[c].docs.forEach(d=>sh[c][d.id]=JSON.stringify(d.data()))});const b=snaps.cfg.docs.find(d=>d.id=='biz');shBiz=b?JSON.stringify(b.data()):''};
-if(!cloudHas){mark();live=true;setDoc(dc('cfg','meta'),{at:Date.now()});cloudSave()}
+else apply(c,s)},e=>{console.error(e);sy('⚠️ Error de la nube ('+(e.code||'?')+')',em(e))}))}
+function first(snaps){const cloudHas=snaps.cfg.docs.some(d=>d.id=='meta'),localHas=db.moves.length||db.sales.length||db.exp.length||db.combos.length||db.products.length>7,dirty=localStorage.getItem('verdu_dirty')=='1';
+const fromCloud=()=>{COLS.forEach(c=>apply(c,snaps[c],1));bizFrom(snaps.cfg)},
+mark=()=>{COLS.forEach(c=>{sh[c]={};snaps[c].docs.forEach(d=>sh[c][d.id]=JSON.stringify(d.data()))});const b=snaps.cfg.docs.find(d=>d.id=='biz');shBiz=b?JSON.stringify(b.data()):''},
+/* hay cambios hechos en este celular que todavía no llegaron a la nube: se unen con lo de la nube (no se pierde nada de ninguno) */
+merge=()=>{mark();COLS.forEach(c=>{const m={};snaps[c].docs.forEach(d=>m[d.id]=d.data());db[c].forEach(x=>{if(c=='products'||c=='combos'||!(x.id in m))m[x.id]=x});db[c]=Object.values(m)});db.products.sort(srt)};
+if(!cloudHas){mark();live=true;pend++;F.setDoc(dc('cfg','meta'),{at:Date.now()}).then(()=>{pend--;online=true;status()}).catch(e=>{pend--;sy('⚠️ Error al guardar en la nube',em(e))});cloudSave()}
 else if(localHas&&localStorage.getItem('verdu_synced')!=code){
  if(confirm('Este celular tiene datos propios y la nube también.\n\nAceptar = usar los datos de la NUBE (se pierden los de este celular)\nCancelar = SUBIR los de este celular (reemplazan a los de la nube)')){localStorage.setItem('verdu_backup',JSON.stringify(db));fromCloud();live=true}
  else{mark();live=true;cloudSave()}}
+else if(dirty){merge();live=true;cloudSave()}
 else{fromCloud();live=true}
-localStorage.setItem('verdu_synced',code);localStore();refresh();status(snaps)}
+window.cloudLive=true;t0=Date.now();localStorage.setItem('verdu_synced',code);localStore();refresh();status();connWatch()}
 function apply(c,s,quiet){if(c=='cfg')bizFrom(s);else{db[c]=s.docs.map(d=>d.data());sh[c]={};db[c].forEach(x=>sh[c][x.id]=JSON.stringify(x));if(c=='products')db.products.sort(srt)}if(!quiet){localStore();refresh()}}
 window.cloudSave=()=>{if(!live)return;const ops=[];COLS.forEach(c=>{const cur={};db[c].forEach(x=>cur[x.id]=JSON.stringify(x));
 for(const i in cur)if(sh[c][i]!==cur[i]){ops.push([c,i,JSON.parse(cur[i])]);sh[c][i]=cur[i]}
 for(const i in sh[c])if(!(i in cur)){ops.push([c,i,null]);delete sh[c][i]}});
 const b=JSON.stringify(db.biz);if(b!==shBiz){ops.push(['cfg','biz',JSON.parse(b)]);shBiz=b}
-for(let k=0;k<ops.length;k+=400){const w=writeBatch(fs);ops.slice(k,k+400).forEach(([c,i,v])=>v?w.set(dc(c,i),v):w.delete(dc(c,i)));w.commit().catch(e=>{console.error(e);sy('⚠️ error de nube')})}};
+for(let k=0;k<ops.length;k+=400){const w=F.writeBatch(fs);ops.slice(k,k+400).forEach(([c,i,v])=>v?w.set(dc(c,i),v):w.delete(dc(c,i)));pend++;w.commit().then(()=>{pend--;online=true;status()}).catch(e=>{pend--;console.error(e);sy('⚠️ Error al guardar en la nube',em(e))})}
+if(ops.length)status()
+localStorage.removeItem('verdu_dirty')};
 </script>
 </body></html>
